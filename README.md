@@ -15,4 +15,5 @@ This is still very basic. I will be adding features often so check back here oft
 This was created using ChatGPT. It probably took me as long to create as a human could have programmed manually but I have no experience programming in Python or for the EDMC so it is kind of impressive.
 
 Notable Changes
+
 2025/04/12 : Added support for multiple construction sites. Sites are removed when they are completed.
