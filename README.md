@@ -17,3 +17,4 @@ This was created using ChatGPT. It probably took me as long to create as a human
 Notable Changes
 
 2025/04/12 : Added support for multiple construction sites. Sites are removed when they are completed.
+2025/04/19 : Added feature - commodities required for construction are highlighted when a commodity market is opened.
