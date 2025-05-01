@@ -4,7 +4,7 @@
 Displays commodities required, provided and needed when you land at a construction site and tracks cargo in your fleet carrier and starship.
 The focus is to create a simple to use and hands free tracker for system colonisation. I will be adding features often so check back here often. This was created using ChatGPT. It probably took me as long to create as a human could have programmed manually but I have no experience programming in Python or for the EDMC so it is kind of impressive.
 
-![Screenshot 2025-04-30 194008](https://github.com/user-attachments/assets/e8f00f28-3114-4bdf-8c3a-4e076434c3e6)
+![Screenshot](https://github.com/kol19pl/EliteDangerous-ArchictectTracker/blob/main/Zrzut%20ekranu%202025-05-01%20131935.png?raw=true)
 
 ### Install Instructions
 1. Create a directory called "Architect Tracker" in the the ED: Marketplace Connector plugins folder.
