@@ -18,11 +18,4 @@ The focus is to create a simple to use and hands free tracker for system colonis
 + Starship cargo will be displayed automaticly.
 + The shortfall column displays how much of a commodity you still need to aquire.
 
-### Notes
-1. VR programs like Desktop+ can display this window inside the game for you.
 
-### Notable Changes
-+ 2025/04/12 : Added support for multiple construction sites. Sites are removed automaticly when they are completed.
-+ 2025/04/19 : Added feature - commodities required for construction are highlighted when a commodity market is opened.
-+ 2025/04/25 : Added fleet carrier cargo information - open the carrier management tool in-game to populate\refresh this list. NOTE: Tracks cargo transfers to/from FC but not market sales.
-+ 2025/04/30 : Added starship cargo tracking and dark theme colours.
