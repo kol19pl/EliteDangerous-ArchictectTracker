@@ -190,7 +190,8 @@ def load_cargo_data():
         return [], None
 
 # --- GUI ---
-class ArchitectTrackerGUI(tk.Toplevel):   
+class ArchitectTrackerGUI(tk.Toplevel):
+
     edBlue = "#1fbeff"
     edOrange = "#ff8500"
     bgBlack="#1a1a1a"
@@ -280,35 +281,43 @@ class ArchitectTrackerGUI(tk.Toplevel):
         self.update_idletasks()
         width = self.winfo_reqwidth()
         height = self.winfo_reqheight()
-        self.geometry(f"{width}x{height}")      
-        
-    def _build_widgets(self):        
+        self.geometry(f"{width}x{height}")
+
+    def _build_widgets(self):
         self.setStyle()
         frame = ttk.Frame(self, padding=10)
         frame.pack(fill=tk.BOTH, expand=True)
-        
+
         self.station_var = tk.StringVar()
-        ttk.Label(frame, text="Market:").grid(row=0, column=1, sticky="w", padx=(10,0))
+        ttk.Label(frame, text="Market:").grid(row=0, column=1, sticky="w", padx=(10, 0))
         self.market_name_label = ttk.Label(frame, text="")
         self.market_name_label.grid(row=0, column=2, sticky="w")
-        ttk.Label(frame, text="Carrier:").grid(row=0, column=3, sticky="w", padx=(10,0))
+        ttk.Label(frame, text="Carrier:").grid(row=0, column=3, sticky="w", padx=(10, 0))
         self.carrier_label = ttk.Label(frame, text="")
         self.carrier_label.grid(row=0, column=4, sticky="w")
-        
+
         self.dropdown = ttk.Combobox(frame, textvariable=self.station_var, state="readonly")
         self.dropdown.grid(row=0, column=0, sticky="w")
         self.dropdown.bind("<<ComboboxSelected>>", lambda e: self.display_station())
-        
-        cols = ("Material", "Required", "Provided", "Needed", "For Sale", "Carrier Qty", "Ship Qty", "Shortfall")        
+
+        cols = ("Material", "Required", "Provided", "Needed", "For Sale", "Carrier Qty", "Ship Qty", "Shortfall")
         self.tree = ttk.Treeview(frame, columns=cols, show="headings")
         for c in cols:
             self.tree.heading(c, text=c)
-            if c != "Material":
-                self.tree.column(c, anchor='center')
+            anchor = 'w' if c == "Material" else 'center'
+            self.tree.column(c, anchor=anchor)
+
+        # Scrollbar pionowy
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        # Umieszczenie w gridzie
         self.tree.grid(row=1, column=0, columnspan=5, sticky="nsew")
-        
+        scrollbar.grid(row=1, column=5, sticky='ns')
+
         frame.rowconfigure(1, weight=1)
-        frame.columnconfigure(0, weight=1)
+        for col in range(5):
+            frame.columnconfigure(col, weight=1)
 
     def refresh(self):
         data = load_facility_requirements()
