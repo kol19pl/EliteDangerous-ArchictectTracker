@@ -255,21 +255,22 @@ class ArchitectTrackerGUI(tk.Toplevel):
         title_bar.bind('<Button-1>', self.get_pos)
     
     def setStyle(self):       
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Treeview", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange, rowheight=24,
-                        selectbackground=ArchitectTrackerGUI.bgBlack)
-        style.configure("Heading", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange)
-        style.configure("TCombobox", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange, selectbackground=ArchitectTrackerGUI.bgBlack)
-        style.configure("TFrame", background=ArchitectTrackerGUI.bgBlack)
-        style.configure("TLabel", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange)
-        style.map("Treeview", foreground=[("selected", ArchitectTrackerGUI.edBlue)])
-        style.map('TCombobox',
-                  fieldbackground=[('readonly', ArchitectTrackerGUI.bgBlack)], # Background color of the entry field
-                  background=[('readonly', ArchitectTrackerGUI.bgBlack)]) # Background color of the dropdown list
+       style = ttk.Style()
+
+        #style.theme_use("default")
+       # style.configure("Treeview", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange, rowheight=24,
+        #                selectbackground=ArchitectTrackerGUI.bgBlack)
+       # style.configure("Heading", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange)
+       # style.configure("TCombobox", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange, selectbackground=ArchitectTrackerGUI.bgBlack)
+      #  style.configure("TFrame", background=ArchitectTrackerGUI.bgBlack)
+      #  style.configure("TLabel", background=ArchitectTrackerGUI.bgBlack, foreground=ArchitectTrackerGUI.edOrange)
+     #   style.map("Treeview", foreground=[("selected", ArchitectTrackerGUI.edBlue)])
+    #    style.map('TCombobox',
+     #             fieldbackground=[('readonly', ArchitectTrackerGUI.bgBlack)], # Background color of the entry field
+     #             background=[('readonly', ArchitectTrackerGUI.bgBlack)]) # Background color of the dropdown list
     
     def _build_info_widgets(self): 
-        self.setStyle()
+      #  self.setStyle()
         frame = ttk.Frame(self, padding=10)
         frame.pack(fill=tk.BOTH, expand=True)
         
