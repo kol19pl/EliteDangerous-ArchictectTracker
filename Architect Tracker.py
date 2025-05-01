@@ -262,6 +262,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
         ttk.Button(frame, text="Settings", command=self.open_settings) \
             .grid(row=1, column=0, sticky="w", padx=5, pady=(8, 0))
 
+
         # Treeview setup (row 2)
         cols = ("Material", "Required", "Provided", "Needed",
                 "For Sale", "Carrier Qty", "Ship Qty", "Shortfall")
