@@ -262,10 +262,9 @@ class ArchitectTrackerGUI(tk.Toplevel):
         ttk.Button(frame, text="Settings", command=self.open_settings) \
             .grid(row=1, column=0, sticky="w", padx=5, pady=(8, 0))
 
-
         # Treeview setup (row 2)
         cols = ("Material", "Required", "Provided", "Needed",
-                "For Sale", "Carrier Qty", "Ship Qty", "Shortfall")
+                "ON LAST STATION", "Carrier Qty", "Ship Qty", "Shortfall")
         self.tree = ttk.Treeview(frame, columns=cols, show="headings")
         for c in cols:
             self.tree.heading(c, text=c)
@@ -311,7 +310,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
         self.hide_var = tk.BooleanVar(value=self.hide_provided)
         chk_hide = ttk.Checkbutton(
             settings_window,
-            text="Usuń dostarczone z listy",
+            text="Remove delivered from lists",
             variable=self.hide_var,
             command=self.toggle_hide_provided
         )
@@ -325,6 +324,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
         self.hide_provided = self.hide_var.get()
         self.refresh()
 
+
     def refresh_columns(self):
         visible_columns = [col for col, vis in self.column_visibility.items() if vis]
         self.tree["displaycolumns"] = visible_columns
@@ -333,36 +333,37 @@ class ArchitectTrackerGUI(tk.Toplevel):
             self.tree.column(col, width=100)
 
     def refresh(self):
-        #data = load_facility_requirements()
-        # przywróć poprzedni wybór, jeśli jest
-        previous = self.last_selection or self.station_var.get()
+        # Zapamiętaj aktualnie wybraną nazwę stacji
+        current_selection = self.station_var.get()
+
+        # Wczytaj nowe dane
         data = load_facility_requirements()
         self.data = data
-        display = [(full.split(':', 1)[-1].strip() if ':' in full else full, full) for full in data]
-        display.sort(key=lambda x: x[0])
+
+        # Przygotuj dane do wyświetlenia
+        display = [
+            (full.split(':', 1)[-1].strip() if ':' in full else full, full)
+            for full in data
+        ]
+        display.sort(key=lambda x: x[0])  # Sortuj alfabetycznie
         self.station_map = {name: full for name, full in display}
-        #self.dropdown['values'] = [name for name, _ in display]
-        #if display:
-        #    self.station_var.set(display[0][0])
-        #    self.display_station()
-        #else:
-        #    self.tree.delete(*self.tree.get_children())
+
+        # Zaktualizuj dropdown
         values = [name for name, _ in display]
         self.dropdown['values'] = values
+
+        # Przywróć wybór lub wybierz domyślnie pierwszą stację
         if values:
-        # jeśli poprzednia stacja nadal jest w liście, wybierz ją
-         if previous in values:
-          self.station_var.set(previous)
-         else:
-          self.station_var.set(values[0])
-          self.display_station()
+            if current_selection in values:
+                self.station_var.set(current_selection)
+            else:
+                self.station_var.set(values[0])
 
+            # Odśwież dane dla wybranej stacji
+            self.display_station()
         else:
-         self.tree.delete(*self.tree.get_children())
-
-           # zapamiętaj aktualny wybór
-        self.last_selection = self.station_var.get()
-
+            # Brak danych – wyczyść drzewo
+            self.tree.delete(*self.tree.get_children())
 
     def display_station(self):
         self.tree.delete(*self.tree.get_children())
@@ -448,10 +449,17 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
         if ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists():
             ARCHITECT_GUI.refresh()
 
+    elif event == "CargoDepot":
+        if ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists():
+            ARCHITECT_GUI.refresh()
+
+
 
 def capi_fleetcarrier(data: CAPIData):
     logger.info("Received fleet carrier CAPI data")
     carrier_tracker.update(data)
     if ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists():
         ARCHITECT_GUI.refresh()
+
+
 
