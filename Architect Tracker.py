@@ -30,9 +30,8 @@ CARRIER_FILE = os.path.join(USER_DIR, "fleet_carrier_cargo.json")
 MARKET_JSON = os.path.join(os.getenv('USERPROFILE', os.path.expanduser('~')), 'Saved Games', 'Frontier Developments', 'Elite Dangerous', 'Market.json')
 CARGO_JSON = os.path.join(os.getenv('USERPROFILE', os.path.expanduser('~')), 'Saved Games', 'Frontier Developments', 'Elite Dangerous', 'Cargo.json')
 # Files for saving data and settings
-SAVE_FILE     = os.path.join(USER_DIR, "construction_requirements.json")   
-SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")                    
-LOG_FILE      = os.path.join(USER_DIR, "EDMC_Architect_Log.txt")           
+SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")
+
 
 
 # Reset log
