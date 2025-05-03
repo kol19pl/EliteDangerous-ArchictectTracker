@@ -22,6 +22,7 @@ The focus is to create a simple to use and hands free tracker for system colonis
 1. VR programs like Desktop+ can display this window inside the game for you.
 
 ### Notable Changes
++ 2025/05/03 : Adaptation for new naming conwention for colonisation ship
 + 2025/05/01 : Deleted unworking style , ad setings for beter use
 + 2025/04/12 : Added support for multiple construction sites. Sites are removed automaticly when they are completed.
 + 2025/04/19 : Added feature - commodities required for construction are highlighted when a commodity market is opened.

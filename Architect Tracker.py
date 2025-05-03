@@ -30,8 +30,9 @@ CARRIER_FILE = os.path.join(USER_DIR, "fleet_carrier_cargo.json")
 MARKET_JSON = os.path.join(os.getenv('USERPROFILE', os.path.expanduser('~')), 'Saved Games', 'Frontier Developments', 'Elite Dangerous', 'Market.json')
 CARGO_JSON = os.path.join(os.getenv('USERPROFILE', os.path.expanduser('~')), 'Saved Games', 'Frontier Developments', 'Elite Dangerous', 'Cargo.json')
 # Files for saving data and settings
-SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")
-
+SAVE_FILE     = os.path.join(USER_DIR, "construction_requirements.json")   
+SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")                    
+LOG_FILE      = os.path.join(USER_DIR, "EDMC_Architect_Log.txt")           
 
 
 # Reset log
@@ -280,7 +281,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
         # Top controls (row 0)
         self.station_var = tk.StringVar()
         self.dropdown = ttk.Combobox(frame, textvariable=self.station_var, state="readonly")
-        self.dropdown.grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.dropdown.grid(row=0, column=0, sticky="w", padx=(0, 50))
         self.dropdown.bind("<<ComboboxSelected>>", lambda e: self.display_station())
 
         ttk.Label(frame, text="Market:").grid(row=0, column=1, sticky="e", padx=(0, 5))
@@ -397,7 +398,11 @@ class ArchitectTrackerGUI(tk.Toplevel):
 
         # Przygotuj dane do wyświetlenia
         display = [
-            (full.split(':', 1)[-1].strip() if ':' in full else full, full)
+            (
+              (full.split(':', 1)[-1].strip() if ':' in full else 
+               full.split(';', 1)[-1].strip() if ';' in full else full),
+              full
+            )
             for full in data
         ]
         display.sort(key=lambda x: x[0])  # Sortuj alfabetycznie
