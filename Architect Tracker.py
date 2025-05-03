@@ -29,6 +29,11 @@ LOG_FILE = os.path.join(USER_DIR, "EDMC_Architect_Log.txt")
 CARRIER_FILE = os.path.join(USER_DIR, "fleet_carrier_cargo.json")
 MARKET_JSON = os.path.join(os.getenv('USERPROFILE', os.path.expanduser('~')), 'Saved Games', 'Frontier Developments', 'Elite Dangerous', 'Market.json')
 CARGO_JSON = os.path.join(os.getenv('USERPROFILE', os.path.expanduser('~')), 'Saved Games', 'Frontier Developments', 'Elite Dangerous', 'Cargo.json')
+# Files for saving data and settings
+SAVE_FILE     = os.path.join(USER_DIR, "construction_requirements.json")   
+SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")                    
+LOG_FILE      = os.path.join(USER_DIR, "EDMC_Architect_Log.txt")           
+
 
 # Reset log
 with suppress(Exception):
@@ -41,6 +46,27 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(formatter)
 if not logger.hasHandlers():
     logger.addHandler(file_handler)
+
+
+
+# --- Settings persistence ---
+def load_gui_settings():                                                    
+    if not os.path.exists(SETTINGS_FILE):                                   
+        return {}                                                          
+    try:                                                                   
+        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:               
+            return json.load(f)                                             
+    except Exception as e:                                                  
+        logger.error(f"Error loading GUI settings: {e}")                  
+        return {}                                                           
+
+def save_gui_settings(settings: dict):                                       
+    try:                                                                    
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:               
+            json.dump(settings, f, indent=4)                                
+    except Exception as e:                                                  
+        logger.error(f"Error saving GUI settings: {e}")                     
+
 
 # --- Helpers ---
 def decode_vanity_name(hex_string):
@@ -203,9 +229,17 @@ class ArchitectTrackerGUI(tk.Toplevel):
         self.title("Architect Tracker")
         self.geometry("800x600")
         self.configure(bg=self.bgBlack)
-        self.hide_provided = False  # Nowe ustawienie
-        self.last_selection = None
+        settings = load_gui_settings()                                      # linia 205+       
+        self.hide_provided     = settings.get('hide_provided', False)        # linia 206  ← dodane
+        cols = ("Material", "Required", "Provided", "Needed",
+                "ON LAST STATION", "Carrier Qty", "Ship Qty", "Shortfall")
+        self.column_visibility = settings.get(
+            'column_visibility',
+            {c: True for c in cols}
+        )
+
         self.setStyle()
+        
 
         if not os.path.exists(SAVE_FILE):
             self._build_info_widgets()
@@ -280,11 +314,12 @@ class ArchitectTrackerGUI(tk.Toplevel):
         for i in range(5):
             frame.columnconfigure(i, weight=1)
 
-        self.column_visibility = {c: True for c in cols}
+        #self.column_visibility = {c: True for c in cols}
         self.refresh_columns()  # Ensure columns initial visibility
 
     def open_settings(self):
         settings_window = tk.Toplevel(self)
+        settings_window.transient(self)
         settings_window.title("Settings")
         ttk.Label(settings_window, text="Select columns to display:").pack(padx=10, pady=5)
         for idx, (col, visible) in enumerate(self.column_visibility.items()):
@@ -294,7 +329,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
                     settings_window,
                     text=col,
                     variable=var,
-                    state="disabled"
+                    state="disabled"              
                 )
                 var.set(True)
             else:
@@ -316,13 +351,34 @@ class ArchitectTrackerGUI(tk.Toplevel):
         )
         chk_hide.pack(anchor="w", padx=10, pady=(10, 0))
 
+        # Position settings window over parent
+        settings_window.update_idletasks()
+        px = self.winfo_x()
+        py = self.winfo_y()
+        pw = self.winfo_width()
+        ph = self.winfo_height()
+        sw = settings_window.winfo_width()
+        sh = settings_window.winfo_height()
+        x = px + (pw - sw) // 2
+        y = py + (ph - sh) // 2
+        settings_window.geometry(f"+{x}+{y}")
+
+
     def toggle_column(self, column, is_visible: bool):
         self.column_visibility[column] = is_visible
         self.refresh_columns()
+        save_gui_settings({
+            'column_visibility': self.column_visibility,
+            'hide_provided': self.hide_provided
+        })
 
     def toggle_hide_provided(self):
         self.hide_provided = self.hide_var.get()
         self.refresh()
+        save_gui_settings({
+            'column_visibility': self.column_visibility,
+            'hide_provided': self.hide_provided
+        })
 
 
     def refresh_columns(self):
