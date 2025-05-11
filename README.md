@@ -6,7 +6,13 @@ The focus is to create a simple to use and hands free tracker for system colonis
 
 ![Screenshot](https://github.com/kol19pl/EliteDangerous-ArchictectTracker/blob/main/Zrzut%20ekranu%202025-05-01%20131935.png?raw=true)
 
-### Install Instructions
+### Install Instructions from relese
+1. Go the the ED: Marketplace Connector plugins folder.
+2. Extract "Architect Tracker.zip" into a plugins folder.
+3. Start EDMC.
+
+
+### Install Instructions from sorce
 1. Create a directory called "Architect Tracker" in the the ED: Marketplace Connector plugins folder.
 2. Save the code from "Architect Tracker.py" into a file called "load.py".
 3. Start EDMC.
@@ -18,10 +24,9 @@ The focus is to create a simple to use and hands free tracker for system colonis
 + Starship cargo will be displayed automaticly.
 + The shortfall column displays how much of a commodity you still need to aquire.
 
-### Notes
-1. VR programs like Desktop+ can display this window inside the game for you.
 
 ### Notable Changes
++ 2025/05/11 : Aded System sorting station, Delite stations in setings , Est trip for construction and completion %
 + 2025/05/03 : Adaptation for new naming conwention for colonisation ship
 + 2025/05/01 : Deleted unworking style , ad setings for beter use
 + 2025/04/12 : Added support for multiple construction sites. Sites are removed automaticly when they are completed.
