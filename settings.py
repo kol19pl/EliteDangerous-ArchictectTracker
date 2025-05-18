@@ -39,3 +39,14 @@ def save_gui_settings(settings: dict):
     except Exception as e:
         logger.error(f"Error saving GUI settings: {e}")
 
+def get_skipped_version():
+    """Get the skipped version from settings."""
+    settings = load_gui_settings()
+    return settings.get('skipped_version', '')
+
+def save_skipped_version(version: str):
+    """Save the skipped version to settings."""
+    settings = load_gui_settings()
+    settings['skipped_version'] = version
+    save_gui_settings(settings)
+

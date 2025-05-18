@@ -10,10 +10,12 @@ from config import config
 # Don't import theme to avoid any interference with EDMC's theming system
 import theme  # Import as module to avoid namespace conflicts
 from typing import Optional
+import threading
 
 # Import settings functionality
-from settings import USER_DIR, load_gui_settings, save_gui_settings
+from settings import USER_DIR, load_gui_settings, save_gui_settings, get_skipped_version, save_skipped_version
 from GUI_settings import SettingsWindow
+import updater
 
 # Global GUI instance
 ARCHITECT_GUI = None
@@ -283,7 +285,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
         settings = load_gui_settings()                                      # linia 205+       
         self.hide_provided     = settings.get('hide_provided', False)        # linia 206  ← dodane
         self.sort_by_system   = settings.get('sort_by_system', False)         # Sort stations by system
-        self.selected_system  = settings.get('selected_system', "Wszystkie Systemy")  # Filter by system
+        self.selected_system  = settings.get('selected_system', "All Systems")  # Filter by system
         self.cargo_capacity   = settings.get('cargo_capacity', 720)           # Default cargo capacity (Type-9)
         
         # Store settings window reference for theme updates
@@ -765,15 +767,15 @@ class ArchitectTrackerGUI(tk.Toplevel):
         
         # Prepare system dropdown
         current_system = self.system_var.get()
-        system_values = ["Wszystkie Systemy"] + sorted(list(systems))
+        system_values = ["All Systems"] + sorted(list(systems))
         self.system_dropdown['values'] = system_values
         
         # Restore system selection if possible
         if current_system in system_values:
             self.system_var.set(current_system)
         else:
-            self.system_var.set("Wszystkie Systemy")
-            self.selected_system = "Wszystkie Systemy"
+            self.system_var.set("All Systems")
+            self.selected_system = "All Systems"
 
         # Przygotuj dane do wyświetlenia
         display = [
@@ -783,7 +785,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
               full
             )
             for full in data
-            if self.selected_system == "Wszystkie Systemy" or 
+            if self.selected_system == "All Systems" or 
                self.data.get(full, {}).get('system', '') == self.selected_system
         ]
         # Sort based on user preference
@@ -893,12 +895,118 @@ class ArchitectTrackerGUI(tk.Toplevel):
         else:
             self.transport_label['text'] = f"All materials delivered! - Completion: 100%"
 
+# --- Update Notification Dialog ---
+class UpdateNotificationDialog(tk.Toplevel):
+    """Dialog that notifies user about available updates in Polish."""
+    
+    def __init__(self, parent, current_version, latest_version, latest_release_data):
+        super().__init__(parent)
+        self.parent = parent
+        self.current_version = current_version
+        self.latest_version = latest_version
+        self.latest_release_data = latest_release_data
+        
+        self.title("Dostępna aktualizacja")
+        self.transient(parent)
+        self.grab_set()
+        
+        # Style configuration
+        if hasattr(parent, 'current_theme') and hasattr(parent, 'THEME_COLORS'):
+            theme_colors = parent.THEME_COLORS[parent.current_theme]
+            self.configure(bg=theme_colors["background"])
+            fg_color = theme_colors["foreground"]
+            button_bg = theme_colors["button_bg"]
+            button_fg = theme_colors["button_fg"]
+        else:
+            # Default colors if parent theme not available
+            self.configure(bg="#1a1a1a")
+            fg_color = "#ff8500"
+            button_bg = "#333333"
+            button_fg = "#ffffff"
+        
+        # Content frame
+        frame = ttk.Frame(self, padding=15)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Message
+        ttk.Label(frame, 
+                  text=f"Dostępna jest nowa wersja Architect Tracker!",
+                  font=("Segoe UI", 12, "bold")).pack(pady=(0, 10))
+        
+        ttk.Label(frame, 
+                  text=f"Twoja wersja: {current_version}").pack(anchor="w", pady=2)
+        
+        ttk.Label(frame, 
+                  text=f"Dostępna wersja: {latest_version}",
+                  font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=2)
+        
+        # Description frame with scrollbar if needed
+        desc_frame = ttk.Frame(frame)
+        desc_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        desc_scrollbar = ttk.Scrollbar(desc_frame)
+        desc_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        desc_text = tk.Text(desc_frame, height=6, width=50, wrap=tk.WORD, 
+                          yscrollcommand=desc_scrollbar.set)
+        desc_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        desc_scrollbar.config(command=desc_text.yview)
+        
+        # Insert description
+        desc = self.latest_release_data.get('description', 'Brak informacji o zmianach.')
+        desc_text.insert(tk.END, desc)
+        desc_text.config(state=tk.DISABLED)
+        
+        # Buttons
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill=tk.X, pady=(15, 0))
+        
+        ttk.Button(button_frame, text="Otwórz Ustawienia", 
+                 command=self.open_settings).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(button_frame, text="Pomiń tę wersję", 
+                 command=self.skip_version).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(button_frame, text="Zamknij", 
+                 command=self.destroy).pack(side=tk.RIGHT, padx=5)
+        
+        # Center the dialog over the parent window
+        self.update_idletasks()
+        if parent:
+            x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
+            y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
+        else:
+            x = (self.winfo_screenwidth() - self.winfo_width()) // 2
+            y = (self.winfo_screenheight() - self.winfo_height()) // 2
+        self.geometry(f"+{x}+{y}")
+    
+    def open_settings(self):
+        """Open the settings window to the Updates tab."""
+        if hasattr(self.parent, 'open_settings'):
+            self.parent.open_settings()
+            # Select the Updates tab
+            if hasattr(self.parent, 'settings_window') and self.parent.settings_window:
+                if hasattr(self.parent.settings_window, 'notebook'):
+                    # Find the index of the Updates tab
+                    for i in range(self.parent.settings_window.notebook.index('end')):
+                        if self.parent.settings_window.notebook.tab(i, 'text') == 'Updates':
+                            self.parent.settings_window.notebook.select(i)
+                            break
+        self.destroy()
+    
+    def skip_version(self):
+        """Skip this version in future checks."""
+        save_skipped_version(self.latest_version)
+        self.destroy()
+
 # --- Plugin Hooks ---
 def show_gui():
     global ARCHITECT_GUI
     if not ARCHITECT_GUI or not ARCHITECT_GUI.winfo_exists():
         # Create new window with appropriate theme
         ARCHITECT_GUI = ArchitectTrackerGUI(None)
+        # Schedule update check after GUI is fully loaded
+        ARCHITECT_GUI.after(2000, check_for_updates_at_startup)
     else:
         # Update existing window
         ARCHITECT_GUI.lift()
@@ -908,6 +1016,78 @@ def show_gui():
         ARCHITECT_GUI.setStyle()
         
         ARCHITECT_GUI.refresh()
+
+def check_for_updates_at_startup():
+    """Check for updates at startup and show notification if newer version is available."""
+    global ARCHITECT_GUI
+    
+    if not ARCHITECT_GUI or not ARCHITECT_GUI.winfo_exists():
+        logger.warning("Cannot check for updates: GUI not initialized")
+        return
+    
+    logger.info("Checking for updates at startup")
+    
+    # Use threading to avoid freezing the UI
+    def _check_worker():
+        try:
+            success, result = updater.get_available_releases()
+            
+            if not success:
+                logger.warning(f"Failed to check for updates: {result}")
+                return
+            
+            if not result:
+                logger.info("No releases found when checking for updates")
+                return
+            
+            # Get current and latest versions
+            current_version = updater.get_current_version()
+            latest_release = result[0]  # Releases are already sorted by version (descending)
+            latest_version = latest_release.get('version')
+            
+            # Get skipped version from settings
+            skipped_version = get_skipped_version()
+            
+            # Check if there's a newer version and if it's not skipped
+            if (updater.is_newer_version(current_version, latest_version) and 
+                latest_version != skipped_version):
+                
+                logger.info(f"New version available: {latest_version} (current: {current_version})")
+                
+                # Show notification in the main thread
+                ARCHITECT_GUI.after(0, lambda: show_update_notification(
+                    current_version, latest_version, latest_release))
+            else:
+                logger.info(f"No new version available or version was skipped. " 
+                           f"Current: {current_version}, Latest: {latest_version}, "
+                           f"Skipped: {skipped_version}")
+        
+        except Exception as e:
+            logger.error(f"Error checking for updates: {e}")
+    
+    # Start update check in a separate thread
+    check_thread = threading.Thread(target=_check_worker)
+    check_thread.daemon = True
+    check_thread.start()
+
+def show_update_notification(current_version, latest_version, latest_release_data):
+    """Show the update notification dialog."""
+    global ARCHITECT_GUI
+    
+    if not ARCHITECT_GUI or not ARCHITECT_GUI.winfo_exists():
+        logger.warning("Cannot show update notification: GUI not initialized")
+        return
+    
+    # Create and show the update notification dialog
+    notification = UpdateNotificationDialog(
+        ARCHITECT_GUI, 
+        current_version, 
+        latest_version, 
+        latest_release_data
+    )
+    
+    # Make sure dialog is on top but doesn't block the main application
+    notification.focus_set()
 
 
 def plugin_start3(plugin_dir):

@@ -5,6 +5,8 @@ import threading
 
 # Import the updater module
 import updater
+# Import bug report module
+import bug_report
 
 class SettingsWindow:
     """Class that handles the settings window for Architect Tracker plugin."""
@@ -113,6 +115,30 @@ class SettingsWindow:
         self.update_tab = ttk.Frame(self.notebook, style="Main.TFrame")
         self.notebook.add(self.update_tab, text="Updates")
         
+        # Create a fifth tab for Info
+        self.info_tab = ttk.Frame(self.notebook, style="Main.TFrame")
+        self.notebook.add(self.info_tab, text="Info")
+        
+        # --------- INFO TAB ---------
+        # Add title
+        ttk.Label(self.info_tab, 
+                  text="Architect Tracker", 
+                  style="TLabel",
+                  font=("Segoe UI", 14, "bold")).pack(anchor="center", padx=10, pady=(20, 10))
+        
+        # Add developer information
+        info_text = "This is a version of Architect Tracker developed by kol19pl, originally created by kfpopeye."
+        ttk.Label(self.info_tab, 
+                  text=info_text,
+                  style="TLabel",
+                  wraplength=400).pack(anchor="center", padx=10, pady=(10, 20))
+        
+        # Add current version
+        version_text = f"Current Version: {updater.get_current_version()}"
+        ttk.Label(self.info_tab,
+                  text=version_text,
+                  style="TLabel").pack(anchor="center", padx=10, pady=(5, 20))
+        
         # --------- UPDATES TAB ---------
         ttk.Label(self.update_tab, text=f"Current Version: {updater.get_current_version()}", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
 
@@ -122,6 +148,9 @@ class SettingsWindow:
 
         # Button to check for updates
         ttk.Button(update_frame, text="Check for Updates", command=self.check_for_updates, style="TButton").pack(side="left", padx=(0, 5))
+        
+        # Add Report Bugs button
+        ttk.Button(update_frame, text="Report Bugs", command=self.show_bug_report, style="TButton").pack(side="left", padx=(5, 5))
 
         # Version dropdown for selection
         ttk.Label(self.update_tab, text="Available Versions:", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
@@ -286,9 +315,9 @@ class SettingsWindow:
                 systems.add(system_name)
         
         # Prepare system dropdown
-        self.system_var = tk.StringVar(value="Wszystkie Systemy")  # Default to "All Systems"
+        self.system_var = tk.StringVar(value="All Systems")  # Default to "All Systems"
         self.system_dropdown = ttk.Combobox(system_frame, textvariable=self.system_var, state="readonly", width=25)
-        system_values = ["Wszystkie Systemy"] + sorted(list(systems))
+        system_values = ["All Systems"] + sorted(list(systems))
         self.system_dropdown['values'] = system_values
         self.system_dropdown.pack(side="left", padx=(0, 5))
         self.system_dropdown.bind("<<ComboboxSelected>>", lambda e: self.filter_stations_by_system())
@@ -362,7 +391,7 @@ class SettingsWindow:
     def update_station_data(self):
         """Update the internal station data structure for filtering."""
         self.remove_station_map = {}  # Map display names to full station keys
-        self.system_station_data = {"Wszystkie Systemy": []}  # Store station data by system
+        self.system_station_data = {"All Systems": []}  # Store station data by system
         
         for station_key, info in self.data.items():
             # Use same display format as main UI
@@ -381,7 +410,7 @@ class SettingsWindow:
             self.system_station_data[system_name].append((display_text, station_key))
             
             # Also add to the "All Systems" list
-            self.system_station_data["Wszystkie Systemy"].append((display_text, station_key))
+            self.system_station_data["All Systems"].append((display_text, station_key))
             
             # Update the mapping
             self.remove_station_map[display_text] = station_key
@@ -590,4 +619,10 @@ class SettingsWindow:
     def winfo_exists(self):
         """Check if the window exists."""
         return self.window and self.window.winfo_exists()
+        
+    def show_bug_report(self):
+        """Show the bug report dialog."""
+        # Get theme colors for current theme to pass to the bug report dialog
+        theme_colors = self.THEME_COLORS[self.current_theme]
+        bug_report.show_bug_report_dialog(self.window, theme_colors)
 
