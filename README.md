@@ -19,7 +19,7 @@ https://forums.frontier.co.uk/threads/colonization-tool-architect-tracker.636854
 
 ### Install Instructions from sorce
 1. Create a directory called "Architect Tracker" in the the ED: Marketplace Connector plugins folder.
-2. Save the code from "Architect Tracker.py" into a file called "load.py".
+2. Save the code all file from "Architect Tracker".
 3. Start EDMC.
 
 ### Usage
@@ -31,6 +31,8 @@ https://forums.frontier.co.uk/threads/colonization-tool-architect-tracker.636854
 
 
 ### Notable Changes
++ 2025/05/18 : The code has been split for easier editing. Improved structure removal functions.
++ 2025/05/12 : Addet independent theme blac and white
 + 2025/05/11 : Aded System sorting station, Delite stations in setings , Est trip for construction and completion %
 + 2025/05/03 : Adaptation for new naming conwention for colonisation ship
 + 2025/05/01 : Deleted unworking style , ad setings for beter use
