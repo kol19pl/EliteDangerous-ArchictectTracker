@@ -31,6 +31,7 @@ https://forums.frontier.co.uk/threads/colonization-tool-architect-tracker.636854
 
 
 ### Notable Changes
++ 2025/05/18 : Ad update function
 + 2025/05/18 : bag fix
 + 2025/05/18 : The code has been split for easier editing. Improved structure removal functions.
 + 2025/05/12 : Addet independent theme blac and white
