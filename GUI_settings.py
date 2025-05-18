@@ -1,6 +1,10 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from typing import Dict, Any, Callable, List, Optional, Tuple
+import threading
+
+# Import the updater module
+import updater
 
 class SettingsWindow:
     """Class that handles the settings window for Architect Tracker plugin."""
@@ -104,6 +108,44 @@ class SettingsWindow:
         self.notebook.add(self.display_tab, text="Display Settings")
         self.notebook.add(self.theme_tab, text="Theme")
         self.notebook.add(self.station_tab, text="Station Management")
+        
+        # Create a fourth tab for Updates
+        self.update_tab = ttk.Frame(self.notebook, style="Main.TFrame")
+        self.notebook.add(self.update_tab, text="Updates")
+        
+        # --------- UPDATES TAB ---------
+        ttk.Label(self.update_tab, text=f"Current Version: {updater.get_current_version()}", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+
+        # Create frame for update controls
+        update_frame = ttk.Frame(self.update_tab, style="Main.TFrame")
+        update_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+
+        # Button to check for updates
+        ttk.Button(update_frame, text="Check for Updates", command=self.check_for_updates, style="TButton").pack(side="left", padx=(0, 5))
+
+        # Version dropdown for selection
+        ttk.Label(self.update_tab, text="Available Versions:", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        self.version_var = tk.StringVar()
+        self.version_dropdown = ttk.Combobox(self.update_tab, textvariable=self.version_var, state="readonly", width=30)
+        self.version_dropdown.pack(anchor="w", padx=10, pady=(0, 5), fill="x")
+
+        # Store version data for lookup
+        self.available_releases = []
+
+        # Update button
+        self.update_button = ttk.Button(self.update_tab, text="Download Selected Version", command=self.download_update, state="disabled", style="TButton")
+        self.update_button.pack(anchor="w", padx=10, pady=(5, 10))
+
+        # Progress bar and status
+        self.progress_frame = ttk.Frame(self.update_tab, style="Main.TFrame")
+        self.progress_frame.pack(anchor="w", padx=10, pady=5, fill="x", expand=True)
+
+        self.progress_var = tk.DoubleVar(value=0)
+        self.progress_bar = ttk.Progressbar(self.progress_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill="x", expand=True, pady=(0, 5))
+
+        self.status_label = ttk.Label(self.progress_frame, text="", style="TLabel")
+        self.status_label.pack(anchor="w", pady=5)
         
         # --------- DISPLAY SETTINGS TAB ---------
         ttk.Label(self.display_tab, text="Select columns to display:", style="TLabel").pack(padx=10, pady=5, anchor="w")
@@ -411,6 +453,135 @@ class SettingsWindow:
         # Update settings window background
         self.window.configure(bg=theme_colors["background"])
     
+    def check_for_updates(self):
+        """Check for available updates from GitHub."""
+        # Disable the button during check
+        for widget in self.update_tab.winfo_children():
+            if isinstance(widget, ttk.Button) and widget.cget("text") == "Check for Updates":
+                widget.configure(state="disabled")
+        
+        self.status_label.configure(text="Checking for updates...")
+        self.progress_var.set(0)
+        
+        # Use threading to avoid freezing the UI
+        def _check_worker():
+            success, result = updater.get_available_releases()
+            
+            # Update UI in the main thread
+            self.window.after(0, lambda: self._process_update_check_result(success, result))
+        
+        check_thread = threading.Thread(target=_check_worker)
+        check_thread.daemon = True
+        check_thread.start()
+
+    def _process_update_check_result(self, success, result):
+        """Process the result of the update check."""
+        # Re-enable the check button
+        for widget in self.update_tab.winfo_children():
+            if isinstance(widget, ttk.Button) and widget.cget("text") == "Check for Updates":
+                widget.configure(state="normal")
+        
+        if not success:
+            self.status_label.configure(text=f"Error: {result}")
+            self.update_button.configure(state="disabled")
+            return
+        
+        # Store release information
+        self.available_releases = result
+        
+        if not self.available_releases:
+            self.status_label.configure(text="No releases found.")
+            self.update_button.configure(state="disabled")
+            return
+        
+        # Populate dropdown with version information
+        version_options = []
+        current_version = updater.get_current_version()
+        has_newer_version = False
+        
+        for release in self.available_releases:
+            version_str = release['version']
+            is_newer = updater.is_newer_version(current_version, version_str)
+            
+            if is_newer:
+                version_options.append(f"{version_str} (New!)")
+                has_newer_version = True
+            else:
+                version_options.append(version_str)
+        
+        self.version_dropdown['values'] = version_options
+        
+        # Select the latest version by default
+        if version_options:
+            self.version_dropdown.current(0)
+            self.update_button.configure(state="normal")
+        
+        # Update status
+        if has_newer_version:
+            self.status_label.configure(text="New version available!")
+        else:
+            self.status_label.configure(text="You have the latest version.")
+
+    def download_update(self):
+        """Download and install the selected version."""
+        # Get selected version
+        selected = self.version_var.get()
+        if not selected:
+            return
+        
+        # Remove " (New!)" suffix if present
+        if "(New!)" in selected:
+            selected = selected.split(" (New!)")[0]
+        
+        # Find the release data
+        release_data = None
+        for release in self.available_releases:
+            if release['version'] == selected:
+                release_data = release
+                break
+        
+        if not release_data:
+            self.status_label.configure(text="Error: Selected version not found.")
+            return
+        
+        # Confirm update
+        current_version = updater.get_current_version()
+        message = f"Are you sure you want to update from version {current_version} to {selected}?\n\n"
+        message += "The application will need to restart after the update."
+        
+        if not messagebox.askyesno("Confirm Update", message, parent=self.window):
+            return
+        
+        # Disable controls during update
+        self.update_button.configure(state="disabled")
+        self.version_dropdown.configure(state="disabled")
+        
+        # Start the update
+        updater.download_and_install_update(
+            release_data,
+            progress_callback=self._update_progress,
+            completion_callback=self._update_complete
+        )
+
+    def _update_progress(self, progress, message):
+        """Update the progress bar and status message."""
+        if progress < 0:  # Error
+            self.progress_var.set(0)
+        else:
+            self.progress_var.set(progress)
+        self.status_label.configure(text=message)
+
+    def _update_complete(self, success, message):
+        """Handle update completion."""
+        if success:
+            messagebox.showinfo("Update Complete", message, parent=self.window)
+            # Re-enable controls
+            self.version_dropdown.configure(state="readonly")
+        else:
+            messagebox.showerror("Update Failed", message, parent=self.window)
+            self.update_button.configure(state="normal")
+            self.version_dropdown.configure(state="readonly")
+
     def destroy(self):
         """Destroy the settings window."""
         if self.window and self.window.winfo_exists():
