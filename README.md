@@ -43,3 +43,4 @@ https://forums.frontier.co.uk/threads/colonization-tool-architect-tracker.636854
 + 2025/04/19 : Added feature - commodities required for construction are highlighted when a commodity market is opened.
 + 2025/04/25 : Added fleet carrier cargo information - open the carrier management tool in-game to populate\refresh this list. NOTE: Tracks cargo transfers to/from FC but not market sales.
 + 2025/04/30 : Added starship cargo tracking and dark theme colours.
+
