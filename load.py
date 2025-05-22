@@ -384,6 +384,10 @@ class ArchitectTrackerGUI(tk.Toplevel):
                   background=[("active", main_theme_colors["background"])],
                   foreground=[("active", main_theme_colors["highlight"])])
 
+        # Configure TreeView tags for intelligent row shading
+        if hasattr(self, 'tree'):
+            self.initializeTreeViewTags()
+
     def _build_info_widgets(self):
         frame = ttk.Frame(self, padding=10, style="Main.TFrame")
         frame.pack(fill=tk.BOTH, expand=True)
@@ -456,6 +460,9 @@ class ArchitectTrackerGUI(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        # Initialize the tree tags right after tree creation
+        self.initializeTreeViewTags()
+
         # Make row 3 expandable
         frame.rowconfigure(3, weight=1)
         for i in range(8):
@@ -464,6 +471,28 @@ class ArchitectTrackerGUI(tk.Toplevel):
 
         #self.column_visibility = {c: True for c in cols}
         self.refresh_columns()  # Ensure columns initial visibility
+
+    def initializeTreeViewTags(self):
+        """Initialize and configure TreeView tags for row coloring"""
+        # Define colors based on the theme
+        if self.materials_theme == self.THEME_BLACK:
+            # Dark theme colors
+            evenrow_bg = "#252525"  # Slightly lighter than default dark background
+            oddrow_bg = "#1a1a1a"   # Default dark background
+            full_delivery_bg = "#1e3a1e"  # Dark green for completed deliveries
+            no_delivery_bg = "#3a1e1e"    # Dark red tint for zero deliveries
+        else:
+            # Light theme colors
+            evenrow_bg = "#ffffff"  # White for even rows
+            oddrow_bg = "#f0f0f0"   # Light gray for odd rows
+            full_delivery_bg = "#e0ffe0"  # Light green for completed deliveries
+            no_delivery_bg = "#ffe0e0"    # Light red tint for zero deliveries
+        
+        # Configure the tags
+        self.tree.tag_configure('evenrow', background=evenrow_bg)
+        self.tree.tag_configure('oddrow', background=oddrow_bg)
+        self.tree.tag_configure('fullDelivery', background=full_delivery_bg)
+        self.tree.tag_configure('noDelivery', background=no_delivery_bg)
 
 
     def toggle_column(self, column, is_visible: bool):
@@ -869,11 +898,18 @@ class ArchitectTrackerGUI(tk.Toplevel):
         self.market_name_label['text'] = market_name or 'N/A'
         self.carrier_label['text'] = carrier_tracker.carrier_name or 'N/A'
 
-        for idx, (mat, vals) in enumerate(materials.items()):
+        # First, filter materials that will be displayed based on hide_provided setting
+        visible_materials = []
+        for mat, vals in materials.items():
             req = vals['RequiredAmount']
             prov = vals['ProvidedAmount']
-            if self.hide_provided and prov >= req:
-                continue
+            if not (self.hide_provided and prov >= req):  # Only add if it should be visible
+                visible_materials.append((mat, vals))
+
+        # Now iterate through only the visible materials with a proper counter for alternating colors
+        for idx, (mat, vals) in enumerate(visible_materials):
+            req = vals['RequiredAmount']
+            prov = vals['ProvidedAmount']
             safeMat = mat.replace("$", "").replace("_name;", "")
             locName = vals['Name_Localised']
             need = req - prov
@@ -882,9 +918,21 @@ class ArchitectTrackerGUI(tk.Toplevel):
             fc_qty = carrier_tracker.get_quantity(safeMat)
             ship_qty = cargo_lookup.get(safeMat, {}).get('Count', 0)
             short = max(0, need - (fc_qty + ship_qty))
-            tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
+            
+            # Assign base tag for alternating row colors
+            base_tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
+            
+            # Determine delivery status tag
+            if prov >= req:
+                status_tag = 'fullDelivery'  # Fully delivered
+            elif prov == 0:
+                status_tag = 'noDelivery'    # No deliveries yet
+            else:
+                status_tag = base_tag        # Partially delivered - use normal alternating colors
+            
+            # Insert with appropriate tags - use BOTH tags in a tuple
             self.tree.insert("", "end", values=(locName, req, prov, need, for_sale,
-                                                   fc_qty, ship_qty, short), tags=(tag,))
+                                                   fc_qty, ship_qty, short), tags=(base_tag, status_tag))
             
         # Calculate and display estimated transport trips and completion percentage
         required_trips = self.calculate_required_trips(materials)

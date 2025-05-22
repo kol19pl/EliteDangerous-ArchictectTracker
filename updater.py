@@ -15,7 +15,7 @@ import threading
 logger = logging.getLogger("ArchitectTracker.Updater")
 
 # Constants
-CURRENT_VERSION = "1.8"
+CURRENT_VERSION = "1.8.2"
 GITHUB_API_URL = "https://api.github.com/repos/kol19pl/EliteDangerous-ArchictectTracker/releases"
 GITHUB_RELEASES_URL = "https://github.com/kol19pl/EliteDangerous-ArchictectTracker/releases"
 TEMP_DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_download")

@@ -31,6 +31,7 @@ https://forums.frontier.co.uk/threads/colonization-tool-architect-tracker.636854
 
 
 ### Notable Changes
++ 2025/05/22 : Smal ui update
 + 2025/05/18 : Ad bag raport function
 + 2025/05/18 : Ad update function
 + 2025/05/18 : bag fix
