@@ -19,19 +19,34 @@ class SettingsWindow:
                  
                  # Settings data
                  column_visibility: Dict[str, bool],
+                 column_order: List[str],
                  hide_provided: bool,
                  sort_by_system: bool,
                  cargo_capacity: int,
                  data: Dict,
                  
+                 # Window geometry settings
+                 window_width: int = 800,
+                 window_height: int = 400,
+                 window_x: int = 0,
+                 window_y: int = 0,
+                 
+                 # CAPI refresh settings
+                 capi_refresh_interval: int = 60,
+                 
                  # Callback functions
-                 toggle_column_callback: Callable[[str, bool], None],
-                 toggle_hide_provided_callback: Callable[[], None],
-                 toggle_sort_mode_callback: Callable[[], None],
-                 update_cargo_capacity_callback: Callable[[int], None],
-                 remove_station_callback: Callable[[str], None],
-                 change_theme_callback: Callable[[int], None],
-                 change_materials_theme_callback: Callable[[int], None]):
+                 toggle_column_callback: Callable[[str, bool], None] = None,
+                 reorder_columns_callback: Callable[[List[str]], None] = None,
+                 toggle_hide_provided_callback: Callable[[], None] = None,
+                 toggle_sort_mode_callback: Callable[[], None] = None,
+                 update_cargo_capacity_callback: Callable[[int], None] = None,
+                 remove_station_callback: Callable[[str], None] = None,
+                 change_theme_callback: Callable[[int], None] = None,
+                 change_materials_theme_callback: Callable[[int], None] = None,
+                 update_window_size_callback: Callable[[int, int, int, int], None] = None,
+                 reset_window_size_callback: Callable[[], None] = None,
+                 force_refresh_capi_callback: Callable[[], None] = None,
+                 update_capi_interval_callback: Callable[[int], None] = None):
         """
         Initialize the settings window.
         
@@ -64,19 +79,32 @@ class SettingsWindow:
         self.current_theme = current_theme
         self.materials_theme = materials_theme
         self.column_visibility = column_visibility
+        self.column_order = column_order
         self.hide_provided = hide_provided
         self.sort_by_system = sort_by_system
         self.cargo_capacity = cargo_capacity
         self.data = data
         
+        # Store window geometry settings
+        self.window_width = window_width
+        self.window_height = window_height
+        self.window_x = window_x
+        self.window_y = window_y
+        
         # Store callback functions
         self.toggle_column_callback = toggle_column_callback
+        self.reorder_columns_callback = reorder_columns_callback
         self.toggle_hide_provided_callback = toggle_hide_provided_callback
         self.toggle_sort_mode_callback = toggle_sort_mode_callback
         self.update_cargo_capacity_callback = update_cargo_capacity_callback
         self.remove_station_callback = remove_station_callback
         self.change_theme_callback = change_theme_callback
         self.change_materials_theme_callback = change_materials_theme_callback
+        self.update_window_size_callback = update_window_size_callback
+        self.reset_window_size_callback = reset_window_size_callback
+        self.force_refresh_capi_callback = force_refresh_capi_callback
+        self.update_capi_interval_callback = update_capi_interval_callback
+        self.capi_refresh_interval = capi_refresh_interval
         
         # Create window
         self.window = None
@@ -101,15 +129,19 @@ class SettingsWindow:
         self.notebook = ttk.Notebook(self.window)
         self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # Create three tabs: Display Settings, Theme Settings, and Station Management
+        # Create tabs: Display Settings, Theme Settings, and Station Management
         self.display_tab = ttk.Frame(self.notebook, style="Main.TFrame")
         self.theme_tab = ttk.Frame(self.notebook, style="Main.TFrame")
+        self.window_tab = ttk.Frame(self.notebook, style="Main.TFrame")
         self.station_tab = ttk.Frame(self.notebook, style="Main.TFrame")
         
-        # Add tabs to the notebook
+        # Add tabs to the notebook (Window Settings is hidden by default)
         self.notebook.add(self.display_tab, text="Display Settings")
         self.notebook.add(self.theme_tab, text="Theme")
         self.notebook.add(self.station_tab, text="Station Management")
+        
+        # Window Settings tab is created but not added - hidden unless debug mode is enabled
+        self.window_settings_visible = False
         
         # Create a fourth tab for Updates
         self.update_tab = ttk.Frame(self.notebook, style="Main.TFrame")
@@ -133,11 +165,20 @@ class SettingsWindow:
                   style="TLabel",
                   wraplength=400).pack(anchor="center", padx=10, pady=(10, 20))
         
-        # Add current version
+        # Add current version (double-click to toggle debug mode / Window Settings tab)
         version_text = f"Current Version: {updater.get_current_version()}"
-        ttk.Label(self.info_tab,
+        version_label = ttk.Label(self.info_tab,
                   text=version_text,
-                  style="TLabel").pack(anchor="center", padx=10, pady=(5, 20))
+                  style="TLabel")
+        version_label.pack(anchor="center", padx=10, pady=(5, 5))
+        version_label.bind("<Double-Button-1>", lambda e: self.toggle_window_settings_tab())
+        
+        # Debug mode status (hidden by default)
+        self.debug_status_label = ttk.Label(self.info_tab,
+                  text="",
+                  style="TLabel",
+                  font=("Segoe UI", 8))
+        self.debug_status_label.pack(anchor="center", padx=10, pady=(0, 20))
         
         # --------- UPDATES TAB ---------
         ttk.Label(self.update_tab, text=f"Current Version: {updater.get_current_version()}", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
@@ -180,7 +221,8 @@ class SettingsWindow:
         ttk.Label(self.display_tab, text="Select columns to display:", style="TLabel").pack(padx=10, pady=5, anchor="w")
         
         # Column visibility checkboxes
-        for idx, (col, visible) in enumerate(self.column_visibility.items()):
+        for idx, col in enumerate(self.column_order):
+            visible = self.column_visibility.get(col, True)
             var = tk.BooleanVar(value=visible)
             if idx == 0:
                 chk = ttk.Checkbutton(
@@ -200,7 +242,21 @@ class SettingsWindow:
                     style="TCheckbutton"
                 )
             chk.pack(anchor="w", padx=10)
-            
+
+        ttk.Label(self.display_tab, text="Change column order:", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        order_frame = ttk.Frame(self.display_tab, style="Main.TFrame")
+        order_frame.pack(anchor="w", padx=10, pady=(0, 5), fill="x")
+
+        self.order_listbox = tk.Listbox(order_frame, height=len(self.column_order), activestyle="none", exportselection=False)
+        for col in self.column_order:
+            self.order_listbox.insert(tk.END, col)
+        self.order_listbox.pack(side="left", fill="y")
+
+        button_frame = ttk.Frame(order_frame, style="Main.TFrame")
+        button_frame.pack(side="left", padx=5, fill="y")
+        ttk.Button(button_frame, text="Move Up", command=self.move_column_up, style="TButton").pack(fill="x", pady=2)
+        ttk.Button(button_frame, text="Move Down", command=self.move_column_down, style="TButton").pack(fill="x", pady=2)
+        
         # Add gameplay settings to Display tab
         ttk.Separator(self.display_tab, orient="horizontal").pack(fill="x", padx=10, pady=10)
         ttk.Label(self.display_tab, text="Display options:", style="TLabel").pack(anchor="w", padx=10, pady=(5, 5))
@@ -297,6 +353,73 @@ class SettingsWindow:
             style="TRadiobutton"
         ).pack(anchor="w", padx=5, pady=2)
 
+        # --------- WINDOW SETTINGS TAB ---------
+        # Current window info
+        ttk.Label(self.window_tab, text="Current Window Size and Position:", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        
+        current_info_frame = ttk.Frame(self.window_tab, style="Main.TFrame")
+        current_info_frame.pack(anchor="w", padx=10, pady=(0, 5), fill="x")
+        
+        self.current_info_label = ttk.Label(current_info_frame, text="", style="TLabel")
+        self.current_info_label.pack(anchor="w", side="left", padx=(0, 5))
+        
+        ttk.Button(current_info_frame, text="Refresh", command=self.refresh_current_info, style="TButton").pack(side="left")
+        
+        # Refresh initial info after button is created
+        self.window.update_idletasks()
+        self.refresh_current_info()
+        
+        # Separator
+        ttk.Separator(self.window_tab, orient="horizontal").pack(fill="x", padx=10, pady=10)
+        
+        # Set custom size and position
+        ttk.Label(self.window_tab, text="Set Custom Window Size and Position:", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Window width setting
+        width_frame = ttk.Frame(self.window_tab, style="Main.TFrame")
+        width_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+        ttk.Label(width_frame, text="Width (pixels):", style="TLabel").pack(side="left", padx=(0, 5))
+        self.width_var = tk.StringVar(value=str(self.window_width))
+        width_entry = ttk.Entry(width_frame, width=10, textvariable=self.width_var, style="TEntry")
+        width_entry.pack(side="left", padx=(0, 5))
+        
+        # Window height setting
+        height_frame = ttk.Frame(self.window_tab, style="Main.TFrame")
+        height_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+        ttk.Label(height_frame, text="Height (pixels):", style="TLabel").pack(side="left", padx=(0, 5))
+        self.height_var = tk.StringVar(value=str(self.window_height))
+        height_entry = ttk.Entry(height_frame, width=10, textvariable=self.height_var, style="TEntry")
+        height_entry.pack(side="left", padx=(0, 5))
+        
+        # Window X position
+        x_frame = ttk.Frame(self.window_tab, style="Main.TFrame")
+        x_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+        ttk.Label(x_frame, text="X Position (pixels):", style="TLabel").pack(side="left", padx=(0, 5))
+        self.x_var = tk.StringVar(value=str(self.window_x))
+        x_entry = ttk.Entry(x_frame, width=10, textvariable=self.x_var, style="TEntry")
+        x_entry.pack(side="left", padx=(0, 5))
+        
+        # Window Y position
+        y_frame = ttk.Frame(self.window_tab, style="Main.TFrame")
+        y_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+        ttk.Label(y_frame, text="Y Position (pixels):", style="TLabel").pack(side="left", padx=(0, 5))
+        self.y_var = tk.StringVar(value=str(self.window_y))
+        y_entry = ttk.Entry(y_frame, width=10, textvariable=self.y_var, style="TEntry")
+        y_entry.pack(side="left", padx=(0, 5))
+        
+        # Info label
+        ttk.Separator(self.window_tab, orient="horizontal").pack(fill="x", padx=10, pady=10)
+        info_label = ttk.Label(self.window_tab, 
+                               text="Minimum size: 400x300 pixels",
+                               style="TLabel")
+        info_label.pack(anchor="w", padx=10, pady=(5, 10))
+        
+        # Apply button
+        button_frame = ttk.Frame(self.window_tab, style="Main.TFrame")
+        button_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+        ttk.Button(button_frame, text="Apply Settings", command=self.apply_window_settings, style="TButton").pack(side="left", padx=(0, 5))
+        ttk.Button(button_frame, text="Reset to Default", command=self.reset_window_settings, style="TButton").pack(side="left")
+
         # --------- STATION MANAGEMENT TAB ---------
 
         # --------- STATION MANAGEMENT TAB ---------
@@ -334,6 +457,33 @@ class SettingsWindow:
         # Remove button
         ttk.Button(removal_frame, text="Remove", command=self.remove_station, style="TButton").pack(side="left")
         
+        # --------- CAPI REFRESH SECTION ---------
+        ttk.Separator(self.station_tab, orient="horizontal").pack(fill="x", padx=10, pady=10)
+        ttk.Label(self.station_tab, text="Fleet Carrier Data Refresh:", style="TLabel").pack(anchor="w", padx=10, pady=(5, 5))
+        
+        # Manual refresh button
+        capi_refresh_frame = ttk.Frame(self.station_tab, style="Main.TFrame")
+        capi_refresh_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+        
+        self.capi_refresh_button = ttk.Button(capi_refresh_frame, text="Refresh Fleet Carrier Data", command=self.force_capi_refresh, style="TButton")
+        self.capi_refresh_button.pack(side="left", padx=(0, 10))
+        
+        self.capi_status_label = ttk.Label(capi_refresh_frame, text="", style="TLabel")
+        self.capi_status_label.pack(side="left")
+        
+        # Auto-refresh interval setting
+        auto_refresh_frame = ttk.Frame(self.station_tab, style="Main.TFrame")
+        auto_refresh_frame.pack(anchor="w", padx=10, pady=5, fill="x")
+        
+        ttk.Label(auto_refresh_frame, text="Auto-refresh interval (minutes):", style="TLabel").pack(side="left", padx=(0, 5))
+        self.capi_interval_var = tk.StringVar(value=str(self.capi_refresh_interval))
+        capi_interval_entry = ttk.Entry(auto_refresh_frame, width=6, textvariable=self.capi_interval_var, style="TEntry")
+        capi_interval_entry.pack(side="left", padx=(0, 5))
+        
+        ttk.Button(auto_refresh_frame, text="Apply", command=self.apply_capi_interval, style="TButton").pack(side="left", padx=(0, 5))
+        
+        ttk.Label(auto_refresh_frame, text="(0 = disable auto-refresh)", style="TLabel").pack(side="left")
+        
         # Prepare the mapping from display names to full station keys
         self.remove_station_map = {}  # Map display names to full station keys
         self.system_station_data = {}  # Store station data by system for filtering
@@ -370,6 +520,39 @@ class SettingsWindow:
         """Toggle sort mode in the main window."""
         self.sort_by_system = self.sort_var.get()
         self.toggle_sort_mode_callback()
+
+    def move_column_up(self):
+        selected = self.order_listbox.curselection()
+        if not selected:
+            return
+        idx = selected[0]
+        if idx == 0:
+            return
+        self.column_order[idx - 1], self.column_order[idx] = self.column_order[idx], self.column_order[idx - 1]
+        self.update_order_listbox()
+        self.order_listbox.select_set(idx - 1)
+        self.reorder_columns()
+
+    def move_column_down(self):
+        selected = self.order_listbox.curselection()
+        if not selected:
+            return
+        idx = selected[0]
+        if idx >= len(self.column_order) - 1:
+            return
+        self.column_order[idx + 1], self.column_order[idx] = self.column_order[idx], self.column_order[idx + 1]
+        self.update_order_listbox()
+        self.order_listbox.select_set(idx + 1)
+        self.reorder_columns()
+
+    def update_order_listbox(self):
+        self.order_listbox.delete(0, tk.END)
+        for col in self.column_order:
+            self.order_listbox.insert(tk.END, col)
+
+    def reorder_columns(self):
+        if self.reorder_columns_callback:
+            self.reorder_columns_callback(self.column_order)
     
     def update_cargo_capacity(self):
         """Update cargo capacity in the main window."""
@@ -611,6 +794,48 @@ class SettingsWindow:
             self.update_button.configure(state="normal")
             self.version_dropdown.configure(state="readonly")
 
+    def refresh_current_info(self):
+        """Refresh and display current window size and position."""
+        try:
+            # Get parent window geometry
+            geometry = self.parent.geometry()
+            # Parse geometry string: WIDTHxHEIGHT+X+Y
+            parts = geometry.replace('x', '+').split('+')
+            if len(parts) >= 4:
+                width = parts[0]
+                height = parts[1]
+                x = parts[2]
+                y = parts[3]
+                info_text = f"Size: {width}×{height}  |  Position: X={x}, Y={y}"
+                self.current_info_label.configure(text=info_text)
+        except Exception as e:
+            self.current_info_label.configure(text="Error reading window info")
+
+    def force_capi_refresh(self):
+        """Force an immediate CAPI refresh."""
+        if self.force_refresh_capi_callback:
+            self.force_refresh_capi_callback()
+            self.capi_status_label.configure(text="Refreshing...")
+            # Clear status after 2 seconds
+            self.window.after(2000, lambda: self.capi_status_label.configure(text=""))
+    
+    def apply_capi_interval(self):
+        """Apply the CAPI refresh interval."""
+        try:
+            minutes = int(self.capi_interval_var.get())
+            if minutes < 0:
+                minutes = 0
+            self.capi_interval_var.set(str(minutes))
+            if self.update_capi_interval_callback:
+                self.update_capi_interval_callback(minutes)
+                self.capi_status_label.configure(text=f"Auto-refresh set to {minutes} min")
+                self.window.after(2000, lambda: self.capi_status_label.configure(text=""))
+        except ValueError:
+            messagebox.showerror("Invalid Input", 
+                               "Please enter a valid number of minutes",
+                               parent=self.window)
+            self.capi_interval_var.set(str(self.capi_refresh_interval))
+
     def destroy(self):
         """Destroy the settings window."""
         if self.window and self.window.winfo_exists():
@@ -620,9 +845,67 @@ class SettingsWindow:
         """Check if the window exists."""
         return self.window and self.window.winfo_exists()
         
+    def toggle_window_settings_tab(self):
+        """Toggle the visibility of the Window Settings debug tab."""
+        self.window_settings_visible = not self.window_settings_visible
+        
+        if self.window_settings_visible:
+            # Add the Window Settings tab to the notebook
+            self.notebook.insert("end", self.window_tab, text="Window Settings")
+            self.notebook.select(self.window_tab)
+            self.debug_status_label.configure(text="Debug mode: ON (Window Settings tab visible)")
+        else:
+            # Remove the Window Settings tab
+            self.notebook.forget(self.window_tab)
+            self.debug_status_label.configure(text="")
+            
     def show_bug_report(self):
         """Show the bug report dialog."""
         # Get theme colors for current theme to pass to the bug report dialog
         theme_colors = self.THEME_COLORS[self.current_theme]
         bug_report.show_bug_report_dialog(self.window, theme_colors)
+
+    def apply_window_settings(self):
+        """Apply the window size and position settings."""
+        try:
+            width = int(self.width_var.get())
+            height = int(self.height_var.get())
+            x = int(self.x_var.get())
+            y = int(self.y_var.get())
+            
+            # Validate sizes
+            if width < 400:
+                width = 400
+                self.width_var.set(str(width))
+            if height < 300:
+                height = 300
+                self.height_var.set(str(height))
+            
+            if self.update_window_size_callback:
+                self.update_window_size_callback(width, height, x, y)
+                messagebox.showinfo("Settings Applied", 
+                                  f"Window size set to {width}x{height} at position +{x}+{y}",
+                                  parent=self.window)
+        except ValueError:
+            messagebox.showerror("Invalid Input", 
+                               "Please enter valid integer values for all fields",
+                               parent=self.window)
+    
+    def reset_window_settings(self):
+        """Reset window to default size and position."""
+        if messagebox.askyesno("Reset Window", 
+                              "Reset window to default size (800x400) and centered position?",
+                              parent=self.window):
+            if self.reset_window_size_callback:
+                self.reset_window_size_callback()
+            
+            # Update the display values
+            self.width_var.set("800")
+            self.height_var.set("400")
+            self.x_var.set("0")
+            self.y_var.set("0")
+            
+            messagebox.showinfo("Reset Complete",
+                              "Window has been reset to default settings",
+                              parent=self.window)
 

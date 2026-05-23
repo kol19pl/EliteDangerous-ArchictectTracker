@@ -21,12 +21,20 @@ SETTINGS_FILE = os.path.join(USER_DIR, "settings.json")
 logger = logging.getLogger("ArchitectTracker")
 
 def load_gui_settings():
-    """Load GUI settings from the settings file."""
+    """Load GUI settings from the settings file.
+    
+    Settings are stored in:
+    - Windows: %LOCALAPPDATA%\\ArchitectTracker\\settings.json
+    - macOS: ~/Library/Application Support/ArchitectTracker/settings.json
+    - Linux: ~/.config/ArchitectTracker/settings.json
+    """
     if not os.path.exists(SETTINGS_FILE):
         return {}
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            settings = json.load(f)
+            logger.debug(f"GUI settings loaded from {SETTINGS_FILE}")
+            return settings
     except Exception as e:
         logger.error(f"Error loading GUI settings: {e}")
         return {}
@@ -34,8 +42,10 @@ def load_gui_settings():
 def save_gui_settings(settings: dict):
     """Save GUI settings to the settings file."""
     try:
+        os.makedirs(USER_DIR, exist_ok=True)
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
             json.dump(settings, f, indent=4)
+        logger.debug(f"GUI settings saved successfully to {SETTINGS_FILE}")
     except Exception as e:
         logger.error(f"Error saving GUI settings: {e}")
 

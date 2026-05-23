@@ -15,7 +15,7 @@ import threading
 logger = logging.getLogger("ArchitectTracker.Updater")
 
 # Constants
-CURRENT_VERSION = "1.8.2"
+CURRENT_VERSION = "1.8.3"
 GITHUB_API_URL = "https://api.github.com/repos/kol19pl/EliteDangerous-ArchictectTracker/releases"
 GITHUB_RELEASES_URL = "https://github.com/kol19pl/EliteDangerous-ArchictectTracker/releases"
 TEMP_DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_download")
@@ -49,7 +49,14 @@ def get_available_releases():
         tuple: (success flag, list of releases or error message)
     """
     try:
-        response = requests.get(GITHUB_API_URL, timeout=10)
+        response = requests.get(
+            GITHUB_API_URL,
+            timeout=10,
+            headers={
+                "User-Agent": "ArchitectTracker/1.0",
+                "Accept": "application/vnd.github.v3+json"
+            }
+        )
         response.raise_for_status()
         
         releases = response.json()
