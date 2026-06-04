@@ -36,3 +36,18 @@ from plugin_hooks import (
 )
 
 logger.info("Architect Tracker plugin loaded successfully")
+
+# Wywołaj overlay welcome message jeśli moduł dostępny
+try:
+    import overlay
+except Exception as e:
+    logger.exception("Failed to import overlay module: %s", e)
+else:
+    try:
+        ok = overlay.send_witaj()
+        if not ok:
+            logger.warning("overlay.send_witaj() returned False")
+    except Exception as e:
+        logger.exception("overlay.send_witaj() raised: %s", e)
+
+logger.info("Architect Tracker setup complete")

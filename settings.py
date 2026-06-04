@@ -49,6 +49,43 @@ def save_gui_settings(settings: dict):
     except Exception as e:
         logger.error(f"Error saving GUI settings: {e}")
 
+# Domyślne ustawienia overlay
+DEFAULT_OVERLAY_SETTINGS = {
+    'color': '#003399',
+    'x': 20,
+    'y': 100,
+    'size': 'normal'
+}
+
+# Predefiniowane kolory do wyboru w GUI
+OVERLAY_COLORS = [
+    ('Ciemnoniebieski', '#003399'),
+    ('Pomarańczowy ED', '#ff8500'),
+    ('Niebieski ED', '#1fbeff'),
+    ('Biały', '#ffffff'),
+    ('Czerwony', '#ff0000'),
+    ('Zielony', '#00cc00'),
+    ('Żółty', '#ffff00'),
+    ('Jasnoniebieski', '#00ccff'),
+    ('Fioletowy', '#9900ff'),
+    ('Szary', '#888888'),
+]
+
+def get_overlay_settings():
+    """Pobierz ustawienia overlay (kolor, pozycja, rozmiar)."""
+    settings = load_gui_settings()
+    overlay = settings.get('overlay', {})
+    result = {}
+    for key, default_val in DEFAULT_OVERLAY_SETTINGS.items():
+        result[key] = overlay.get(key, default_val)
+    return result
+
+def save_overlay_settings(overlay_dict: dict):
+    """Zapisz ustawienia overlay."""
+    settings = load_gui_settings()
+    settings['overlay'] = overlay_dict
+    save_gui_settings(settings)
+
 def get_skipped_version():
     """Get the skipped version from settings."""
     settings = load_gui_settings()

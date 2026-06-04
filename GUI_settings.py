@@ -7,6 +7,7 @@ import threading
 import updater
 # Import bug report module
 import bug_report
+from settings import get_overlay_settings, save_overlay_settings, OVERLAY_COLORS
 
 class SettingsWindow:
     """Class that handles the settings window for Architect Tracker plugin."""
@@ -457,6 +458,11 @@ class SettingsWindow:
         # Remove button
         ttk.Button(removal_frame, text="Remove", command=self.remove_station, style="TButton").pack(side="left")
         
+        # --------- OVERLAY TAB ---------
+        self.overlay_tab = ttk.Frame(self.notebook, style="Main.TFrame")
+        self.notebook.add(self.overlay_tab, text="Overlay")
+        self._build_overlay_tab()
+
         # --------- CAPI REFRESH SECTION ---------
         ttk.Separator(self.station_tab, orient="horizontal").pack(fill="x", padx=10, pady=10)
         ttk.Label(self.station_tab, text="Fleet Carrier Data Refresh:", style="TLabel").pack(anchor="w", padx=10, pady=(5, 5))
@@ -845,6 +851,87 @@ class SettingsWindow:
         """Check if the window exists."""
         return self.window and self.window.winfo_exists()
         
+    def _build_overlay_tab(self):
+        """Zbuduj zakładkę Overlay w ustawieniach."""
+        ov = get_overlay_settings()
+        
+        # Kolor - rozwijana lista
+        ttk.Label(self.overlay_tab, text="Kolor tekstu:", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        self.overlay_color_var = tk.StringVar()
+        self.overlay_color_dropdown = ttk.Combobox(self.overlay_tab, textvariable=self.overlay_color_var, state="readonly", width=30)
+        
+        # Zbuduj listę nazw + hexów
+        color_values = [f"{name} ({hexval})" for name, hexval in OVERLAY_COLORS]
+        self.overlay_color_dropdown['values'] = color_values
+        
+        # Znajdź aktualny kolor
+        current_color = ov.get('color', '#003399')
+        default_idx = 0
+        for i, (name, hexval) in enumerate(OVERLAY_COLORS):
+            if hexval == current_color:
+                default_idx = i
+                break
+        self.overlay_color_dropdown.current(default_idx)
+        self.overlay_color_dropdown.pack(anchor="w", padx=10, pady=(0, 5))
+        
+        # Pozycja X
+        ttk.Label(self.overlay_tab, text="Pozycja X (piksele):", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        self.overlay_x_var = tk.StringVar(value=str(ov.get('x', 20)))
+        x_entry = ttk.Entry(self.overlay_tab, width=10, textvariable=self.overlay_x_var, style="TEntry")
+        x_entry.pack(anchor="w", padx=10, pady=(0, 5))
+        
+        # Pozycja Y
+        ttk.Label(self.overlay_tab, text="Pozycja Y (piksele):", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        self.overlay_y_var = tk.StringVar(value=str(ov.get('y', 100)))
+        y_entry = ttk.Entry(self.overlay_tab, width=10, textvariable=self.overlay_y_var, style="TEntry")
+        y_entry.pack(anchor="w", padx=10, pady=(0, 5))
+        
+        # Rozmiar czcionki
+        ttk.Label(self.overlay_tab, text="Rozmiar czcionki:", style="TLabel").pack(anchor="w", padx=10, pady=(10, 5))
+        self.overlay_size_var = tk.StringVar(value=ov.get('size', 'normal'))
+        size_dropdown = ttk.Combobox(self.overlay_tab, textvariable=self.overlay_size_var, state="readonly", width=15)
+        size_dropdown['values'] = ('normal', 'small', 'large')
+        size_dropdown.pack(anchor="w", padx=10, pady=(0, 5))
+        
+        # Przycisk Zastosuj
+        ttk.Separator(self.overlay_tab, orient="horizontal").pack(fill="x", padx=10, pady=15)
+        ttk.Button(self.overlay_tab, text="Zastosuj", command=self.apply_overlay_settings, style="TButton").pack(anchor="w", padx=10)
+        
+    def apply_overlay_settings(self):
+        """Zapisz ustawienia overlay z GUI do pliku settings."""
+        try:
+            # Odczytaj wybrany kolor
+            selected = self.overlay_color_var.get()
+            hex_color = '#003399'
+            for name, hexval in OVERLAY_COLORS:
+                if name in selected:  # szukaj po nazwie w tekscie "Nazwa (#hex)"
+                    hex_color = hexval
+                    break
+            
+            # Odczytaj X i Y
+            x = int(self.overlay_x_var.get())
+            y = int(self.overlay_y_var.get())
+            if x < 0:
+                x = 0
+            if y < 0:
+                y = 0
+            
+            # Odczytaj rozmiar
+            size = self.overlay_size_var.get()
+            
+            overlay_dict = {
+                'color': hex_color,
+                'x': x,
+                'y': y,
+                'size': size
+            }
+            save_overlay_settings(overlay_dict)
+            messagebox.showinfo("Overlay", "Ustawienia overlay zostały zapisane.", parent=self.window)
+        except ValueError:
+            messagebox.showerror("Błąd", "Podaj prawidłowe wartości liczbowe dla pozycji X i Y.", parent=self.window)
+        except Exception as e:
+            messagebox.showerror("Błąd", f"Nie udało się zapisać ustawień: {e}", parent=self.window)
+
     def toggle_window_settings_tab(self):
         """Toggle the visibility of the Window Settings debug tab."""
         self.window_settings_visible = not self.window_settings_visible

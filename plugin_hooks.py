@@ -6,6 +6,7 @@ from tkinter import messagebox
 from companion import CAPIData
 from typing import Optional
 import threading
+import time
 
 from settings import USER_DIR, load_gui_settings, save_gui_settings, get_skipped_version, save_skipped_version
 from gui_main import ArchitectTrackerGUI, carrier_tracker, ARCHITECT_GUI as GUI_INSTANCE
@@ -19,6 +20,18 @@ logger = logging.getLogger("ArchitectTracker")
 ARCHITECT_GUI: Optional[ArchitectTrackerGUI] = None
 PLUGIN_PARENT = None
 frame: Optional[tk.Frame] = None
+# Overlay persistence control
+overlay_resend_thread = None
+overlay_resend_stop_event = None
+overlay_resend_msgid = None
+overlay_active = False  # Flaga: czy overlay już został uruchomiony
+
+# Import overlay for shortage notifications (after logger configured)
+try:
+    import overlay
+except Exception as e:
+    logger.warning(f"Failed to import overlay module: {e}")
+    overlay = None
 
 
 def show_gui():
@@ -129,10 +142,161 @@ def plugin_stop():
         ARCHITECT_GUI.destroy()
 
 
+def _start_overlay(found_station_key, found_station_materials_arg, skip_carrier_flag):
+    """
+    Uruchom persistent overlay z brakami dla podanej stacji.
+    Wydzielona funkcja, aby uniknąć duplikacji kodu między startem gry a eventem Docked.
+    """
+    global overlay_resend_thread, overlay_resend_stop_event, overlay_resend_msgid, overlay_active
+
+    if not overlay:
+        logger.debug("Overlay module not available, cannot start overlay")
+        return
+
+    # Zatrzymaj poprzedni overlay jeśli istnieje
+    try:
+        if overlay_resend_stop_event:
+            overlay_resend_stop_event.set()
+        if overlay_resend_thread and overlay_resend_thread.is_alive():
+            overlay_resend_thread.join(timeout=1)
+    except Exception:
+        pass
+
+    overlay_active = True
+    logger.info(f"Starting persistent overlay for station: {found_station_key}")
+
+    # Uruchom pętlę odświeżania
+    overlay_resend_stop_event = threading.Event()
+    overlay_resend_msgid = f"archictect-shortage-{int(time.time())}"
+
+    def _resend_loop(station_key, materials, skip_carrier_flag_inner, stop_event, interval=8):
+        try:
+            while not stop_event.is_set():
+                try:
+                    # Każda iteracja odświeża Market.json i Cargo.json
+                    try:
+                        from data_manager import load_market_data, load_cargo_data
+                        market_items, market_name = load_market_data()
+                        cargo_items = load_cargo_data()
+                    except Exception:
+                        market_items, cargo_items = [], []
+
+                    cargo_lookup = {i.get('Name'): i for i in cargo_items} if cargo_items else {}
+                    market_lookup = {i.get('Name'): i for i in market_items} if market_items else {}
+
+                    shortage_data = {}
+                    ship_items_dict = {}  # materiały w ładowni dla sekcji ///on///ship///
+                    for mat_key, mat_info in materials.items():
+                        try:
+                            req = mat_info.get('RequiredAmount', 0)
+                            prov = mat_info.get('ProvidedAmount', 0)
+                            need = req - prov
+
+                            if need <= 0:
+                                continue
+
+                            safe_mat = mat_key.replace("$", "").replace("_name;", "")
+
+                            # Ilość z carriera (pomijane na normalnej stacji)
+                            fc_qty = 0
+                            if not skip_carrier_flag_inner and carrier_tracker:
+                                try:
+                                    fc_qty = carrier_tracker.get_quantity(safe_mat)
+                                except Exception:
+                                    pass
+
+                            # Ilość z ładowni statku
+                            ship_qty = 0
+                            if cargo_lookup and safe_mat in cargo_lookup:
+                                ship_qty = cargo_lookup[safe_mat].get('Count', 0)
+
+                            shortfall = max(0, need - (fc_qty + ship_qty))
+
+                            # Zbierz materiały w ładowni do sekcji ship
+                            if ship_qty > 0:
+                                ship_name = mat_info.get('Name_Localised', safe_mat)
+                                ship_items_dict[ship_name] = ship_qty
+
+                            if shortfall > 0:
+                                shortage_data[mat_key] = {
+                                    'Name_Localised': mat_info.get('Name_Localised', safe_mat),
+                                    'shortfall': shortfall,
+                                    'RequiredAmount': req,
+                                    'ProvidedAmount': prov
+                                }
+                        except Exception:
+                            continue
+
+                    # Podział na dostępne/niedostępne w rynku
+                    available_shortage = {k: v for k, v in shortage_data.items() if market_lookup.get(k, {}).get('Stock', 0) > 0}
+                    unavailable_shortage = {k: v for k, v in shortage_data.items() if k not in available_shortage}
+
+                    # Wyciągnij nazwę wyświetlaną
+                    display_name = station_key
+                    if ':' in display_name:
+                        display_name = display_name.split(':', 1)[-1].strip()
+                    elif ';' in display_name:
+                        display_name = display_name.split(';', 1)[-1].strip()
+
+                    if shortage_data or ship_items_dict:
+                        overlay.send_shortage_overlay(
+                            display_name, available_shortage, unavailable_shortage,
+                            msgid=overlay_resend_msgid, ttl=interval + 2,
+                            ship_items=ship_items_dict if ship_items_dict else None
+                        )
+                except Exception:
+                    logger.debug("Error in overlay resend loop; will retry")
+                stop_event.wait(interval)
+        finally:
+            try:
+                overlay.clear_overlay(overlay_resend_msgid)
+            except Exception:
+                pass
+
+    overlay_resend_thread = threading.Thread(
+        target=_resend_loop,
+        args=(found_station_key, found_station_materials_arg, skip_carrier_flag, overlay_resend_stop_event),
+        daemon=True
+    )
+    overlay_resend_thread.start()
+
+
 def journal_entry(cmdr, is_beta, system, station, entry, state):
     """Called by EDMC for each journal event."""
+    # Declare overlay persistence globals early so they are global within this function
+    global overlay_resend_thread, overlay_resend_stop_event, overlay_resend_msgid, overlay_active
     event = entry.get("event")
     logger.info("Event detected: %s", event)
+
+    # === Overlay przy starcie gry (gdy statek już zadokowany) ===
+    # Jeśli state.Docked=True i overlay jeszcze nie działa, uruchom go
+    if state.get('Docked') and overlay and not overlay_active:
+        data = load_facility_requirements()
+        found_station = None
+        found_station_materials = None
+        for station_key, info in data.items():
+            if station and station.lower() in station_key.lower():
+                found_station = station_key
+                found_station_materials = info.get('materials', {})
+                break
+
+        if not found_station_materials and ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists():
+            try:
+                sel = ARCHITECT_GUI.station_var.get()
+                full_key = ARCHITECT_GUI.station_map.get(sel)
+                if full_key and full_key in ARCHITECT_GUI.data:
+                    found_station = full_key
+                    found_station_materials = ARCHITECT_GUI.data[full_key].get('materials', {})
+            except Exception:
+                pass
+
+        if found_station_materials:
+            _start_overlay(found_station, found_station_materials, True)
+        elif ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists():
+            overlay.send_error_overlay(
+                "Błąd: wybierz stację konstrukcyjną w oknie Architect Tracker",
+                msgid="archictect-error-no-station"
+            )
 
     if event == "ColonisationConstructionDepot":
         resources = entry.get("ResourcesRequired", [])
@@ -148,9 +312,11 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
         logger.info(f"Docked at station: {station} in system: {system}")
         data = load_facility_requirements()
         found_station = None
+        found_station_materials = None
         for station_key, info in data.items():
             if station and station.lower() in station_key.lower():
                 found_station = station_key
+                found_station_materials = info.get('materials', {})
                 logger.info(f"Found matching construction station: {found_station}")
                 break
         
@@ -163,6 +329,46 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
                         ARCHITECT_GUI.station_var.set(display_name)
                         ARCHITECT_GUI.display_station()
                         break
+        
+        # === Obsługa normalnych stacji (nie-konstrukcyjnych) ===
+        # Jeśli nie znaleziono dopasowania do stacji konstrukcyjnej,
+        # spróbuj użyć stacji wybranej w GUI – wtedy overlay pokaże
+        # brakujące materiały dla tej stacji, bez danych z carriera.
+        skip_carrier = False
+        if not found_station_materials and overlay:
+            if not ARCHITECT_GUI or not ARCHITECT_GUI.winfo_exists():
+                # GUI zamknięte – wyślij błąd w overlay'u
+                overlay.send_error_overlay(
+                    "Błąd: otwórz okno Architect Tracker i wybierz stację konstrukcyjną",
+                    msgid="archictect-error-no-gui"
+                )
+            else:
+                try:
+                    sel = ARCHITECT_GUI.station_var.get()
+                    full_key = ARCHITECT_GUI.station_map.get(sel)
+                    if not sel or not full_key:
+                        # Brak wybranej stacji w GUI
+                        overlay.send_error_overlay(
+                            "Błąd: wybierz stację konstrukcyjną w oknie Architect Tracker",
+                            msgid="archictect-error-no-station"
+                        )
+                    elif full_key in ARCHITECT_GUI.data:
+                        found_station = full_key
+                        found_station_materials = ARCHITECT_GUI.data[full_key].get('materials', {})
+                        skip_carrier = True  # na normalnej stacji pomiń dane z carriera
+                        logger.info(f"Using GUI-selected construction station for overlay: {found_station}")
+                    else:
+                        # Stacja istnieje ale nie ma materiałów (usunięta?)
+                        overlay.send_error_overlay(
+                            f"Błąd: brak danych dla stacji {sel}",
+                            msgid="archictect-error-no-data"
+                        )
+                except Exception as e:
+                    logger.debug(f"Could not get GUI-selected station: {e}")
+
+        # Uruchom persistent overlay – wspólna funkcja odświeża market/cargo co 8s
+        if found_station_materials and overlay:
+            _start_overlay(found_station, found_station_materials, skip_carrier)
 
     elif event == "Loadout":
         cargo_capacity = entry.get("CargoCapacity")
@@ -179,6 +385,20 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
         logger.info(f"Market-related event detected: {event}. Refreshing GUI.")
         if ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists():
             ARCHITECT_GUI.refresh()
+
+    elif event == "Undocked":
+        # Stop persistent overlay resend when undocking
+        overlay_active = False  # zresetuj flagę – po ponownym zadokowaniu overlay może wystartować
+        if overlay_resend_stop_event:
+            try:
+                overlay_resend_stop_event.set()
+            except Exception:
+                pass
+        if overlay_resend_thread and overlay_resend_thread.is_alive():
+            try:
+                overlay_resend_thread.join(timeout=1)
+            except Exception:
+                pass
 
     elif event == "CargoTransfer":
         transfers = entry.get("Transfers", [])
