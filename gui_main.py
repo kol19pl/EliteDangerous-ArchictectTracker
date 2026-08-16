@@ -1,4 +1,5 @@
-"""Main GUI module - contains ArchitectTrackerGUI and UpdateNotificationDialog."""
+﻿"""Main GUI module - contains ArchitectTrackerGUI and UpdateNotificationDialog."""
+import json
 import os
 import logging
 import tkinter as tk
@@ -314,19 +315,26 @@ class ArchitectTrackerGUI(tk.Toplevel):
         self.save_settings()
 
     def toggle_hide_provided(self, value=None):
-        if value is not None:
-            self.hide_provided = value
-            if hasattr(self, 'hide_var'):
-                self.hide_var.set(value)
-        else:
-            self.hide_provided = self.hide_var.get()
-        self.refresh()
-        self.save_settings()
+        try:
+            if value is not None:
+                self.hide_provided = value
+                if hasattr(self, 'hide_var'):
+                    self.hide_var.set(value)
+            else:
+                self.hide_provided = getattr(self, 'hide_var', None).get() if hasattr(self, 'hide_var') else self.hide_provided
+            self.refresh()
+            self.save_settings()
+        except Exception as e:
+            logger.warning(f"Could not toggle hide provided state: {e}")
 
     def toggle_sort_mode(self):
-        self.sort_by_system = self.sort_var.get()
-        self.refresh()
-        self.save_settings()
+        try:
+            if hasattr(self, 'sort_var'):
+                self.sort_by_system = self.sort_var.get()
+            self.refresh()
+            self.save_settings()
+        except Exception as e:
+            logger.warning(f"Could not toggle sort mode: {e}")
     
     def update_cargo_capacity(self, value=None):
         try:
@@ -335,21 +343,34 @@ class ArchitectTrackerGUI(tk.Toplevel):
                 if hasattr(self, 'cargo_var'):
                     self.cargo_var.set(str(capacity))
             else:
-                capacity = int(self.cargo_var.get())
+                if hasattr(self, 'cargo_var'):
+                    capacity = int(self.cargo_var.get())
+                else:
+                    capacity = int(self.cargo_capacity)
                 
             if capacity < 1:
                 capacity = 1
                 
             self.cargo_capacity = capacity
-            self.display_station()
+            if hasattr(self, 'display_station'):
+                self.display_station()
             self.save_settings()
             logger.info(f"Cargo capacity updated to: {capacity}")
         except ValueError:
             if hasattr(self, 'cargo_var'):
                 self.cargo_var.set(str(self.cargo_capacity))
             logger.warning("Invalid cargo capacity value provided")
+        except Exception as e:
+            logger.warning(f"Could not update cargo capacity: {e}")
         
     def filter_by_system(self):
+        if not self.winfo_exists():
+            logger.debug("Skipping system filter update because the GUI window no longer exists")
+            return
+        if not hasattr(self, 'system_var'):
+            logger.debug("Skipping system filter update because the system selector is unavailable")
+            return
+
         self.selected_system = self.system_var.get()
         self.refresh()
         self.save_settings()
@@ -474,6 +495,14 @@ class ArchitectTrackerGUI(tk.Toplevel):
         )
         
     def remove_station(self, full_station_key=None):
+        if not self.winfo_exists():
+            logger.debug("Skipping station removal because the GUI window no longer exists")
+            return
+
+        if not hasattr(self, 'remove_station_var') or not hasattr(self, 'remove_station_map'):
+            logger.debug("Skipping station removal because removal widgets are not available")
+            return
+
         if full_station_key is None:
             selected = self.remove_station_var.get()
             if not selected:
@@ -481,7 +510,7 @@ class ArchitectTrackerGUI(tk.Toplevel):
                 tk.messagebox.showwarning("Warning", "Please select a station to remove", parent=self)
                 return
             full_station_key = self.remove_station_map.get(selected)
-            
+             
         if not full_station_key:
             logger.error("Could not find station key for the selected station")
             tk.messagebox.showerror("Error", "Could not identify the selected station", parent=self)
@@ -576,20 +605,33 @@ class ArchitectTrackerGUI(tk.Toplevel):
 
     def refresh(self):
         """Refresh the station list and display."""
+        if not self.winfo_exists():
+            logger.debug("Skipping refresh because the GUI window no longer exists")
+            return
+
+        if not hasattr(self, 'station_var') or not hasattr(self, 'system_var'):
+            logger.debug("Skipping refresh because GUI widgets are not initialized yet")
+            return
+
         current_selection = self.station_var.get()
         data = load_facility_requirements()
+        if not isinstance(data, dict):
+            data = {}
         self.data = data
-        
+
         systems = set()
         for station, info in data.items():
+            if not isinstance(info, dict):
+                continue
             system_name = info.get('system', 'Unknown')
             if system_name:
                 systems.add(system_name)
-        
+
         current_system = self.system_var.get()
         system_values = ["All Systems"] + sorted(list(systems))
-        self.system_dropdown['values'] = system_values
-        
+        if hasattr(self, 'system_dropdown'):
+            self.system_dropdown['values'] = system_values
+
         if current_system in system_values:
             self.system_var.set(current_system)
         else:
@@ -606,15 +648,16 @@ class ArchitectTrackerGUI(tk.Toplevel):
             if self.selected_system == "All Systems" or 
                self.data.get(full, {}).get('system', '') == self.selected_system
         ]
-        
+
         if self.sort_by_system:
             display.sort(key=lambda x: (self.data.get(x[1], {}).get('system', ''), x[0]))
         else:
             display.sort(key=lambda x: x[0])
-            
+
         self.station_map = {name: full for name, full in display}
         values = [name for name, _ in display]
-        self.dropdown['values'] = values
+        if hasattr(self, 'dropdown'):
+            self.dropdown['values'] = values
 
         if values:
             if current_selection in values:
@@ -623,9 +666,12 @@ class ArchitectTrackerGUI(tk.Toplevel):
                 self.station_var.set(values[0])
             self.display_station()
         else:
-            self.tree.delete(*self.tree.get_children())
-            self.transport_label['text'] = ""
-            self.cargo_label['text'] = ""
+            if hasattr(self, 'tree') and self.tree is not None:
+                self.tree.delete(*self.tree.get_children())
+            if hasattr(self, 'transport_label'):
+                self.transport_label['text'] = ""
+            if hasattr(self, 'cargo_label'):
+                self.cargo_label['text'] = ""
 
     def calculate_completion_percentage(self, materials):
         total_required = 0
@@ -657,63 +703,93 @@ class ArchitectTrackerGUI(tk.Toplevel):
         return max(1, trips)
         
     def display_station(self):
+        if not self.winfo_exists():
+            logger.debug("Skipping station display because the GUI window no longer exists")
+            return
+
+        if not hasattr(self, 'tree') or self.tree is None:
+            logger.debug("Skipping station display because treeview is not available")
+            return
+        if not hasattr(self, 'station_var') or not hasattr(self, 'station_map'):
+            logger.debug("Skipping station display because the station selector is unavailable")
+            return
+
         self.tree.delete(*self.tree.get_children())
         sel = self.station_var.get()
+        if not isinstance(self.station_map, dict):
+            self.station_map = {}
         full = self.station_map.get(sel)
         if not full:
-            self.transport_label['text'] = ""
+            if hasattr(self, 'transport_label'):
+                self.transport_label['text'] = ""
             return
-        materials = self.data[full]['materials']
+        if not isinstance(self.data, dict):
+            self.data = {}
+        station_entry = self.data.get(full)
+        if not isinstance(station_entry, dict):
+            logger.debug("Skipping station display because the selected station entry is invalid")
+            if hasattr(self, 'transport_label'):
+                self.transport_label['text'] = ""
+            return
+        materials = station_entry.get('materials', {})
+        if not isinstance(materials, dict):
+            materials = {}
+
         market_items, market_name = load_market_data()
         cargo_items = load_cargo_data()
 
         total_cargo = get_total_ship_cargo()
-        self.cargo_label['text'] = f"Current Cargo: {total_cargo}/{self.cargo_capacity} tons"
+        if hasattr(self, 'cargo_label'):
+            self.cargo_label['text'] = f"Current Cargo: {total_cargo}/{self.cargo_capacity} tons"
 
-        market_lookup = {i.get('Name'): i for i in market_items}
-        cargo_lookup = {i.get('Name'): i for i in cargo_items}
+        market_lookup = {i.get('Name'): i for i in market_items if isinstance(i, dict) and i.get('Name')}
+        cargo_lookup = {i.get('Name'): i for i in cargo_items if isinstance(i, dict) and i.get('Name')}
 
-        self.market_name_label['text'] = market_name or 'N/A'
-        self.carrier_label['text'] = carrier_tracker.carrier_name or 'N/A'
+        if hasattr(self, 'market_name_label'):
+            self.market_name_label['text'] = market_name or 'N/A'
+        if hasattr(self, 'carrier_label'):
+            self.carrier_label['text'] = carrier_tracker.carrier_name or 'N/A'
 
         visible_materials = []
         for mat, vals in materials.items():
-            req = vals['RequiredAmount']
-            prov = vals['ProvidedAmount']
+            if not isinstance(vals, dict):
+                continue
+            req = vals.get('RequiredAmount', 0)
+            prov = vals.get('ProvidedAmount', 0)
             if not (self.hide_provided and prov >= req):
                 visible_materials.append((mat, vals))
 
         for idx, (mat, vals) in enumerate(visible_materials):
-            req = vals['RequiredAmount']
-            prov = vals['ProvidedAmount']
-            safeMat = mat.replace("$", "").replace("_name;", "")
-            locName = vals['Name_Localised']
+            req = vals.get('RequiredAmount', 0)
+            prov = vals.get('ProvidedAmount', 0)
+            safeMat = mat.replace("$", "").replace("_name;", "") if isinstance(mat, str) else ""
+            locName = vals.get('Name_Localised', safeMat)
             need = req - prov
             stock_qty = market_lookup.get(mat, {}).get('Stock', 0)
             for_sale = f"✔ {stock_qty}" if stock_qty > 0 else ''
-            fc_qty = carrier_tracker.get_quantity(safeMat)
+            fc_qty = carrier_tracker.get_quantity(safeMat) if safeMat else 0
             ship_qty = cargo_lookup.get(safeMat, {}).get('Count', 0)
             short = max(0, need - (fc_qty + ship_qty))
-            
+
             base_tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
-            
+
             if prov >= req:
                 status_tag = 'fullDelivery'
             elif prov == 0:
                 status_tag = 'noDelivery'
             else:
                 status_tag = base_tag
-            
-            self.tree.insert("", "end", values=(locName, req, prov, need, for_sale,
-                                                   fc_qty, ship_qty, short), tags=(base_tag, status_tag))
-            
+
+            self.tree.insert("", "end", values=(locName, req, prov, need, for_sale, fc_qty, ship_qty, short), tags=(base_tag, status_tag))
+
         required_trips = self.calculate_required_trips(materials)
         completion_percentage = self.calculate_completion_percentage(materials)
-        
-        if required_trips > 0:
-            self.transport_label['text'] = f"Est. trips: {required_trips} (based on {self.cargo_capacity} ton capacity) - Completion: {completion_percentage:.1f}%"
-        else:
-            self.transport_label['text'] = f"All materials delivered! - Completion: 100%"
+
+        if hasattr(self, 'transport_label'):
+            if required_trips > 0:
+                self.transport_label['text'] = f"Est. trips: {required_trips} (based on {self.cargo_capacity} ton capacity) - Completion: {completion_percentage:.1f}%"
+            else:
+                self.transport_label['text'] = f"All materials delivered! - Completion: 100%"
 
 
 # --- Update Notification Dialog ---

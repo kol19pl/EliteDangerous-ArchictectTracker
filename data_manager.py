@@ -27,7 +27,20 @@ def is_station_complete(materials):
     Returns:
         True jeśli wszystkie materiały są w pełni dostarczone, False w przeciwnym razie
     """
-    return all(info["ProvidedAmount"] >= info["RequiredAmount"] for info in materials.values())
+    if not isinstance(materials, dict) or not materials:
+        return True
+
+    for info in materials.values():
+        if not isinstance(info, dict):
+            return False
+        try:
+            required = int(info.get('RequiredAmount', 0))
+            provided = int(info.get('ProvidedAmount', 0))
+        except (TypeError, ValueError):
+            return False
+        if provided < required:
+            return False
+    return True
 
 
 def save_facility_requirements(materials, station_name, system, refresh_callback=None):
@@ -42,6 +55,12 @@ def save_facility_requirements(materials, station_name, system, refresh_callback
         system: Nazwa systemu gwiezdnego
         refresh_callback: Opcjonalna funkcja do odświeżenia GUI po zapisie
     """
+    if station_name is None:
+        logger.warning("Attempted to save facility requirements without a station name")
+        return
+
+    materials = materials if isinstance(materials, dict) else {}
+
     try:
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -85,8 +104,19 @@ def load_facility_requirements():
     except Exception as e:
         logger.error("Błąd odczytu pliku: %s", e)
         return {}
+
+    if not isinstance(data, dict):
+        logger.warning("Invalid facility requirements structure in save file; resetting to empty dict")
+        return {}
+
     # Usuń ukończone stacje
-    cleaned = {s: info for s, info in data.items() if not is_station_complete(info.get("materials", {}))}
+    cleaned = {}
+    for station_key, info in data.items():
+        if not isinstance(info, dict):
+            continue
+        materials = info.get("materials", {})
+        if not is_station_complete(materials):
+            cleaned[station_key] = info
     if cleaned != data:
         try:
             with open(SAVE_FILE, "w", encoding="utf-8") as f:

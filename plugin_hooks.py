@@ -152,6 +152,10 @@ def _start_overlay(found_station_key, found_station_materials_arg, skip_carrier_
     if not overlay:
         logger.debug("Overlay module not available, cannot start overlay")
         return
+    if not found_station_key or not found_station_materials_arg:
+        logger.warning("Cannot start overlay without station key and materials")
+        overlay_active = False
+        return
 
     # Zatrzymaj poprzedni overlay jeśli istnieje
     try:
@@ -159,8 +163,8 @@ def _start_overlay(found_station_key, found_station_materials_arg, skip_carrier_
             overlay_resend_stop_event.set()
         if overlay_resend_thread and overlay_resend_thread.is_alive():
             overlay_resend_thread.join(timeout=1)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"Failed to stop previous overlay thread: {exc}")
 
     overlay_active = True
     logger.info(f"Starting persistent overlay for station: {found_station_key}")
@@ -203,7 +207,7 @@ def _start_overlay(found_station_key, found_station_materials_arg, skip_carrier_
                                 try:
                                     fc_qty = carrier_tracker.get_quantity(safe_mat)
                                 except Exception:
-                                    pass
+                                    logger.debug(f"Could not read carrier quantity for material: {safe_mat}")
 
                             # Ilość z ładowni statku
                             ship_qty = 0
@@ -225,7 +229,7 @@ def _start_overlay(found_station_key, found_station_materials_arg, skip_carrier_
                                     'ProvidedAmount': prov
                                 }
                         except Exception:
-                            continue
+                            logger.debug(f"Skipping invalid material entry for key: {mat_key}", exc_info=True)
 
                     # Podział na dostępne/niedostępne w rynku
                     available_shortage = {k: v for k, v in shortage_data.items() if market_lookup.get(k, {}).get('Stock', 0) > 0}
@@ -245,13 +249,14 @@ def _start_overlay(found_station_key, found_station_materials_arg, skip_carrier_
                             ship_items=ship_items_dict if ship_items_dict else None
                         )
                 except Exception:
-                    logger.debug("Error in overlay resend loop; will retry")
+                    logger.debug("Error in overlay resend loop; will retry", exc_info=True)
                 stop_event.wait(interval)
         finally:
+            overlay_active = False
             try:
                 overlay.clear_overlay(overlay_resend_msgid)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(f"Failed to clear overlay in thread cleanup: {exc}")
 
     overlay_resend_thread = threading.Thread(
         target=_resend_loop,
@@ -288,22 +293,31 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
                     found_station = full_key
                     found_station_materials = ARCHITECT_GUI.data[full_key].get('materials', {})
             except Exception:
-                pass
+                logger.debug("Could not determine selected station from GUI during startup overlay check", exc_info=True)
 
         if found_station_materials:
             _start_overlay(found_station, found_station_materials, True)
-        elif ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists():
+        elif ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists() and overlay:
             overlay.send_error_overlay(
                 "Błąd: wybierz stację konstrukcyjną w oknie Architect Tracker",
                 msgid="archictect-error-no-station"
             )
 
     if event == "ColonisationConstructionDepot":
-        resources = entry.get("ResourcesRequired", [])
-        materials = {r["Name"]: {"Name_Localised": r["Name_Localised"],
-                                   "RequiredAmount": r["RequiredAmount"],
-                                   "ProvidedAmount": r["ProvidedAmount"]}
-                     for r in resources}
+        resources = entry.get("ResourcesRequired") or []
+        materials = {}
+        for resource in resources:
+            try:
+                name = resource.get("Name")
+                if not name:
+                   continue
+                materials[name] = {
+                   "Name_Localised": resource.get("Name_Localised", name),
+                   "RequiredAmount": resource.get("RequiredAmount", 0),
+                   "ProvidedAmount": resource.get("ProvidedAmount", 0),
+                }
+            except Exception:
+                logger.debug("Skipping invalid construction resource entry", exc_info=True)
         # Use save_facility_requirements with a refresh callback
         save_req(materials, station, system,
                  refresh_callback=lambda: ARCHITECT_GUI.refresh() if ARCHITECT_GUI and ARCHITECT_GUI.winfo_exists() else None)
@@ -364,7 +378,7 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
                             msgid="archictect-error-no-data"
                         )
                 except Exception as e:
-                    logger.debug(f"Could not get GUI-selected station: {e}")
+                    logger.debug(f"Could not get GUI-selected station: {e}", exc_info=True)
 
         # Uruchom persistent overlay – wspólna funkcja odświeża market/cargo co 8s
         if found_station_materials and overlay:

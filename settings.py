@@ -33,14 +33,20 @@ def load_gui_settings():
     try:
         with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
             settings = json.load(f)
-            logger.debug(f"GUI settings loaded from {SETTINGS_FILE}")
-            return settings
+        if not isinstance(settings, dict):
+            logger.warning(f"Invalid GUI settings structure in {SETTINGS_FILE}; resetting to empty dict")
+            return {}
+        logger.debug(f"GUI settings loaded from {SETTINGS_FILE}")
+        return settings
     except Exception as e:
         logger.error(f"Error loading GUI settings: {e}")
         return {}
 
 def save_gui_settings(settings: dict):
     """Save GUI settings to the settings file."""
+    if not isinstance(settings, dict):
+        logger.warning(f"Attempted to save invalid GUI settings payload: {type(settings).__name__}")
+        return
     try:
         os.makedirs(USER_DIR, exist_ok=True)
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
@@ -74,7 +80,11 @@ OVERLAY_COLORS = [
 def get_overlay_settings():
     """Pobierz ustawienia overlay (kolor, pozycja, rozmiar)."""
     settings = load_gui_settings()
+    if not isinstance(settings, dict):
+        settings = {}
     overlay = settings.get('overlay', {})
+    if not isinstance(overlay, dict):
+        overlay = {}
     result = {}
     for key, default_val in DEFAULT_OVERLAY_SETTINGS.items():
         result[key] = overlay.get(key, default_val)
@@ -83,7 +93,9 @@ def get_overlay_settings():
 def save_overlay_settings(overlay_dict: dict):
     """Zapisz ustawienia overlay."""
     settings = load_gui_settings()
-    settings['overlay'] = overlay_dict
+    if not isinstance(settings, dict):
+        settings = {}
+    settings['overlay'] = overlay_dict if isinstance(overlay_dict, dict) else {}
     save_gui_settings(settings)
 
 def get_skipped_version():

@@ -1,3 +1,4 @@
 {
-    "python.languageServer": "None"
+    "python.languageServer": "Default",
+    "cppbuild.isEnabled": false
 }
